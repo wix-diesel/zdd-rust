@@ -28,15 +28,17 @@ SetFamily   ── 所有 ──> Arc<Manager> + RootHandle
 Manager     ── 所有 ──> immutable Universe/Order + 可変Store
 GraphSpace  ── 所有 ──> Arc<GraphData> + FamilySpace + Edge/Variable mapping
 EdgeFamily  ── 所有 ──> Arc<GraphData> + SetFamily + mapping
-Solutions   ── 保持 ──> 対象Family + traversal stack
+Iterator    ── 所有 ──> local DAG snapshot + mapping + traversal stack
 CountIndex  ── 所有 ──> 対象順序/対応 + query用DAG + 部分解数
 ```
 
 Familyの意味は不変。managerは新しいノードを追加できる。同じspaceの二つのFamilyは共有ノードを直接参照し、新Family生成のために全ノードを別storeへ移さない。
 
+各spaceとFamilyのcloneは`Arc`/backend root handleの参照を増やすだけで、universe、Graph、DAGをcloneしない。Familyがmanagerとmappingを所有するため、作成元のspace handleを先にdropできる。iteratorとCountIndexはmanager guard中に到達DAGをlocal表現へ一度だけ写し、以後はmanagerを参照しない。これにより元Familyをdropした後の利用と、`next()`、callback、RNGから同じspaceへ再入する利用を両立する。
+
 v1のgeneric Familyは「グラフに依存しない」という意味であり、ZDDノードをユーザーの任意型でgenericにすることを意味しない。Familyの要素はVariableId、グラフwrapperの要素はEdgeIdとする。文字列・ジョブ等の外部データはIDとの対応表で扱える。typed label adapterの汎用化は後から追加可能。
 
-spaceの同一性はmanagerの所有インスタンスに結び付ける。別spaceの同じ数値ID・同じ変数数だけでは互換と見なさない。内部NodeIdをpublicに渡して複数manager間で混用できる設計にしない。
+spaceの同一性はmanagerの所有インスタンスに結び付ける。別spaceの同じ数値ID・同じ変数数だけでは互換と見なさない。内部NodeIdをpublicに渡して複数manager間で混用できる設計にしない。公開VariableId/VertexId/EdgeIdは意味の異なる型を混ぜないための軽量newtypeであり、由来contextを格納しない。単一IDを受けるAPIは範囲を検査するが、同種の範囲内IDが別context由来であることまでは検出できない。
 
 ## 3. backend境界
 
@@ -50,6 +52,8 @@ spaceの同一性はmanagerの所有インスタンスに結び付ける。別sp
 - 同じmanagerへ複数のFrontier結果を登録すること。
 
 publicなFamily APIにOxiDDの型、pointer/index幅、cache型、GC方式を露出させない。ZERO、unit、powersetの意味が本仕様と一致するようadapterで検証する。基盤のGC/同期規則を無視した独自IDの長期保持や二重lockを行わない。strictなmemo limit・キャンセル・深いstack回避が必要な演算は、OxiDDをnode storeとreductionに使いながらadapter所有の明示stack/memoで実装する。
+
+OxiDD managerの固定inner-node capacityは公開`Limits::max_live_nodes`へ対応させる。public計数はterminalを除外するため、backend固有のterminal/予約slotはadapter内でchecked加算する。universe用tautology nodeを含む初期必要量が上限を超える場合は、manager作成前に拒否する。backendのapply-cache容量は`shared_cache_entries`から導出し、厳密なoperation memoは別のadapter所有tableとする。
 
 以下のarena・table・同期の詳細は、評価で不適合が判明して**専用coreへ切り替える場合の代替設計**として保持する。
 
@@ -141,6 +145,14 @@ exactlyのmemo keyは`(NodeId, remaining_count)`。lo側は個数を変えず、
 
 CountIndexは自分が表すFamilyにのみ適用する。別rootへindexをそのまま使い回すAPIは提供しない。index内の順序は元Familyの変数順序を維持する。
 
+### 資源計数
+
+公開上限と既定値は[API契約](api.md#9-資源制限統計キャンセル)に固定する。adapterは各対象を追加する直前に`current == limit`を検査し、成功した追加後にstatsを更新するため、上限値ちょうどまでは利用できる。複数の制限へ同時に達し得る場合は、処理順で最初に追加が必要になった対象の`LimitKind`を返す。どの種類が先になるかをalgorithm間の永続的な順序契約にはしない。
+
+node上限だけは共有managerのlive量に対するspace-wide制限で、operation memo、Frontier State/transition、query snapshot/count bitsは一操作ごとの制限である。shared computed cacheは容量到達時にevictし、正しさや成功可否を変えない。統計ではmanager全体のcurrent/peak/cumulativeと、一操作のcurrent/peak/cumulativeを混ぜない。
+
+キャンセルtokenは内部ループの作業単位ごとに検査する。検査と次のnode登録の間にキャンセルされるraceは許容し、次の検査で停止する。失敗後に中間nodeが残り得るため、再試行時の`nodes_before`は最初の試行前と同じとは限らない。
+
 ### Countと一様samplingのDP
 
 部分解数は`C(ZERO)=0`、`C(ONE)=1`、`C(n)=C(lo)+C(hi)`。BigUintの加算コストと保持bit数を含める必要があり、単に定数時間加算として扱わない。省略されたvariableに対する係数は不要。
@@ -157,27 +169,34 @@ samplingは`0 <= r < C(root)`の一様なBigUint整数を生成して、次の�
 
 ## 8. 同期と再入
 
-自作coreはArcでmanagerを所有し、演算単位の粗粒度read/write同期を初期案とする。具体的なlock実装はbackend選定時に確定する。
+OxiDDのmanager closureを唯一のguard取得境界とし、adapterからlock型を公開しない。同一managerのwriteはbackendのexclusive closureで直列化され、read-only snapshot取得はshared closureで行う。nodeごとに再取得したり、二つのmanager guardを同時取得したりしない。
 
-- Family演算はwrite側を一度取得して内部計算を行う。ノードごとのlockは禁止。
-- count等の内部DPはread側で実行できる。query用にコピーした後はguardを解放する。
-- iteratorは次の解を求める内部区間だけguardを使い、`next()`から戻る前に解放する。
-- visitorはユーザーcallbackを呼ぶ前にguardを解放する。
-- RNGはCountIndex上で呼び出す。manager guard下で呼ばない。
-- v1.xのコストclosureは重み表作成時に呼び、guard下で呼ばない。
-- FrontierのユーザーState遷移・Hash/Eq・正規化はZDD managerを書き込みlockしたまま実行しない。
+公開操作は次のphaseへ分ける。
 
-同一managerのwriteは直列化される。独立spaceは独立に利用できる。並行利用可能であることと、一操作の並列高速化を区別する。frontier traitにv1からSend/Syncを強制せず、将来の並列入口にだけ追加boundを置く。
+1. guard外で入力の範囲/context、limit変換、キャンセルを検査する。
+2. 必要ならshared guard中に到達DAGをowned local snapshotへ写す。生のbackend node IDはここから出さない。
+3. guard外でユーザーのFrontier transition、State clone/Hash/Eq/canonicalize/drop、iterator利用者のcallback、RNG、外部iteratorの`next()`/dropを実行する。
+4. node生成が必要な結果だけを、exclusive guard中にadapterの確定済み作業列から登録する。ユーザーコードを呼ばず、公開rootは全体成功後にだけ組み立てる。
+
+Family applyのようにnode読み取りと生成を交互に行う内部処理は一つのexclusive closure内で完結できるが、そのclosure内からユーザー実装を呼ばない。Frontierは前向きのState展開をguard外で完了し、後ろ向き縮約だけをexclusive closure内で行う。import/compactionはsourceをshared guard中にsnapshot化して解放した後、destinationのexclusive guardを取得する。
+
+iteratorは初期化時にsnapshotを作るため、各`next()`はguardを取得しない。visitor callbackとRNGはlocal snapshot/CountIndex上で実行する。v1.xのコストclosureもguard外でimmutableな重み表を先に作る。これらのユーザー境界から同じspaceのAPIへ再入しても、adapterが保持したguardによるdeadlockを起こさない。
+
+lock poisoningは公開概念にしない。ユーザーcallbackはguard外なので、そのpanicはmanagerをpoisonしない。backend内部またはadapterのguard内panicはlibrary bugとして扱い、panic後の継続利用を公開保証しない。public errorへ`PoisonError`を追加して通常入力の失敗に見せない。
+
+独立spaceは独立に利用できる。同じspaceのread/write安全性は保証するが、fairness、操作順、単一操作の並列高速化は保証しない。frontier traitにv1から`Send`/`Sync`を強制せず、将来の並列入口にだけ追加boundを置く。
 
 ## 9. メモリ・失敗・compaction
 
-自作coreのv1では、不要ノードのonline回収を行わない。Familyがdropされても、同じmanagerが生きていればarenaは減らない。最後の所有者がdropしたときに一括解放する。
+採用したOxiDD backendでは到達不能nodeをGCできるが、GCの時期とdrop直後のメモリ減少は公開契約にしない。Familyをdropしても共有rootが参照するnodeは保持され、最後のmanager所有者がdropされた時点では全体を解放できる。専用coreへ切り替える場合はonline GCなしでもこの公開契約を満たせる。
 
 明示compactionは複数rootをまとめて新spaceへコピーし、到達不能ノードを取り除く。root間の共有、universe、variable order、Graph mappingを維持する。元spaceを破壊せず、旧Family・iteratorは引き続き有効。
 
 compactionには旧・新DAGとID変換表が同時に必要になる。旧Familyを保持したままでは旧メモリは解放されない。上限・ピーク値にこの一時領域を含める。
 
-mk_nodeでは必要な容量を先に確保し、有効なノードとtableの登録を整合的に行う。操作失敗時に公開rootは変更しない。ただし、すでに作られた有効な一時ノード・cacheが残ることは許容する。全操作のallocationをロールバックする強いtransaction保証はv1では要求しない。
+node登録前にnode上限とbackend結果を確認し、有効なnodeとunique tableの整合性を保つ。操作失敗時に入力rootは変更せず、結果の公開rootも作らない。ただし、すでに正規化・登録された有効な一時nodeやcacheが残ることは許容し、全allocationを戻す強いtransaction保証はv1では要求しない。limit/cancel/user Problem errorには失敗直前までの統計を付ける。
+
+OS allocatorのOOM、process abort、内部bugのpanicからの回復は保証外である。公開limitsで予測できるnode/memo/State/transition/query領域の超過は、backend固有エラーやpanicではなく公開errorへ変換する。
 
 ## 10. 性能設計の原則
 

@@ -32,8 +32,8 @@
 | ADR-019 Computed Table | 操作memoと容量制限付き演算間cacheを分離 | 無制限cache、操作途中に全面消去 | 再計算と寿命を区別できる | 管理領域が二種類 | cache方針は変更可 |
 | ADR-020 query index | CountIndexがDAG情報と値を所有 | managerに巨大tableを永久保持 | 寿命・sampling中の同期を単純化 | query用DAG分の追加領域 | snapshot表現を内部変更可能 |
 | ADR-021 GC | 専用coreではonline GCなし、明示compaction | RC、mark/sweep、generation再利用 | 初期の証明・保守負担を限定 | 長寿命spaceで不要ノード蓄積 | root管理を隠して追加可能。既存backend GC利用可 |
-| ADR-022 同期 | 専用coreでは共有managerに粗粒度同期 | 毎回&mut Context、Rc/RefCell、node lock、lock-free | fluent APIと安全な共有 | write直列化と同期コスト | sharding等は実測後。publicにlockを出さない |
-| ADR-023 失敗 | Result、既存root不変、有効一時ノード残存可 | panic中心、完全transaction | 実用的なエラー処理と低い実装負担 | 失敗しても使用ノード数が増え得る | cleanup改善可。成功値の厳密性は維持 |
+| ADR-022 同期 | OxiDD manager closureでshared/exclusive access、ユーザー境界はlocal snapshot上で実行 | 毎回&mut Context、Rc/RefCell、node lock、lock-free | fluent API、安全な共有、再入時のdeadlock回避 | write直列化とsnapshot領域 | sharding等は実測後。publicにlock/poisonを出さない |
+| ADR-023 失敗 | Result、既存root不変、有効一時node残存可、limit/cancel/Problemは途中stats付き | panic中心、完全transaction | 通常の解なしと失敗を分離し、診断と再利用を可能にする | 失敗してもlive node数が増え得る | cleanup改善可。成功値と既存rootの意味は維持 |
 
 ## 3. Graph・Frontier・提供範囲
 
@@ -50,7 +50,20 @@
 | ADR-032 no_std | v1はstd | no_std+allocを初期から保証 | 利用想定と依存を単純化 | 組み込み環境は対象外 | 依存・APIの再点検が必要 |
 | ADR-033 ライセンス | 現行Apache-2.0 | MIT OR Apache-2.0 | 現行方針を維持 | Rustで一般的なdual licenseではない | 変更時は権利と寄稿条件を確認 |
 
-## 4. 過去案からの変更記録
+## 4. 公開context・資源契約
+
+| ID / 論点 | 採用案 | 代替案 | 採用理由 | デメリット | 将来変更可能か |
+|---|---|---|---|---|---|
+| ADR-034 ID由来 | VariableId/VertexId/EdgeIdは別のopaque軽量newtype、context tokenは持たない | 全IDにspace UUID/Arcを持たせる、整数を共用 | hot pathとSolutionをcompactにし、異種IDの混同は型で防ぐ | 同種で範囲内の別context IDは単項APIで検出不能 | provenance付きadapter追加可。既存newtypeの意味は維持 |
+| ADR-035 context一致 | Family二項演算はmanager identity、EdgeFamilyはGraph mappingも実行時検査。cross-spaceは明示importのみ | universe数が同じなら暗黙合成、root番号比較 | 偶然同じindexの意味混同を防ぐ | cloneでないspace間は明示操作が必要 | import対応範囲は拡張可。暗黙合成は追加しない |
+| ADR-036 limits | finite defaultを持つ`Limits`/`QueryLimits`、追加直前の厳密計数、nodeだけspace-wide | 無制限default、byte/RSS limitのみ | 再現可能な失敗点とbackend非依存の診断 | 実メモリ量を厳密には制限しない | default値はminor releaseで調整可。field意味と明示指定値は維持 |
+| ADR-037 統計 | manager snapshotと操作別statsを分離し、limit/cancel/Problem errorにも途中statsを付ける | globalなlast-operation stats、成功時のみstats | 並行操作で取り違えず、失敗原因を解析できる | report/error型が大きくなる | additive field/variant追加可（non_exhaustive） |
+| ADR-038 キャンセル | clone可能tokenの協調キャンセル、内部作業単位ごとに検査 | thread interruption、timeout専用API | 安全な不変条件維持と外部scheduler連携 | 即時停止は保証できない | deadline helper追加可。強制中断は行わない |
+| ADR-039 panic/poison | callback panicはguard外でunwind、公開PoisonErrorなし。guard内panic後の継続は保証外 | panicをProblemへ変換、poisonをpublic化 | ユーザーerrorとpanicを混同せずbackendを隠す | bug panic後の回復保証なし | opt-in catch helper追加可。通常error契約は維持 |
+
+上限の具体的なdefault、計数対象、error payloadは[API契約](api.md#9-資源制限統計キャンセル)を正とする。
+
+## 5. 過去案からの変更記録
 
 2026-09-12: Frontier構築専用に近い案から、集合族の反復加工を中心とする方針へ変更した。
 
@@ -59,6 +72,6 @@
 - cardinalityと包含filterをFamilyの標準機能へ引き上げる。
 - 前案のv1 spanning treeと安定保存形式はv1.xへ移し、集合族機能を優先する。
 - 「single-thread first」を「逐次アルゴリズム＋共有managerの安全なアクセス」として具体化する。並列速度向上は別段階。
-- OxiDD再利用の評価優先度を上げる。独自coreの採用は確定していない。
+- 当初はOxiDD再利用の評価を優先し、独自core採否を未確定としていた。その後ADR-013の評価でOxiDD採用へ解決した。
 
 これらの変更を前提に、[ロードマップ](roadmap.md)のゲートで実装方式を検証する。

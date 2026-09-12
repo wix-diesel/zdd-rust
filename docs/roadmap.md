@@ -61,16 +61,16 @@ P0のbackend評価コードは[専用ハーネス](../tools/backend-evaluation/R
 | ID | 未決事項 | 初期候補 / 判断基準 | 決定期限 |
 |---|---|---|---|
 | OPEN-01 | backend | **解決（2026-09-12）**: OxiDDをprivate dependencyとして採用。[比較記録](backend-evaluation.md)のgateで切替可能 | P0終了 |
-| OPEN-02 | 自作時のnode幅・配置 | u32 / 12-byte候補。容量、layout、peak RSS | P1のlayout固定前 |
-| OPEN-03 | 自作時の同期実装 | coarse read/write。再入、poison方針、同期コスト | P0/P1 |
-| OPEN-04 | public limitsとdefault値 | 項目ごとの計数、既存rootへの影響、失敗統計 | P1 |
+| OPEN-02 | 自作時のnode幅・配置 | **解決（2026-09-12）**: OxiDD採用によりv1では非該当。NodeId/幅/layoutはprivate backend詳細とし、専用coreへの切替時だけADRを追加 | P0終了 |
+| OPEN-03 | 自作時の同期実装 | **解決（2026-09-12）**: OxiDD manager closureを使用。ユーザーcallback/RNG/iterator/State処理はlocal snapshot上でguard外実行し、poisonを公開しない。[同期設計](architecture.md#8-同期と再入) | P0終了 |
+| OPEN-04 | public limitsとdefault値 | **解決（2026-09-12）**: finite default、追加直前の計数、space-wide nodeと操作単位limitを確定。[API契約](api.md#9-資源制限統計キャンセル) | P0終了 |
 | OPEN-05 | computed cache置換・初期容量 | operation memoを保護し、shared cacheをboundedにする | P1/P2 |
 | OPEN-06 | CountIndex配置 | query DAG snapshot＋BigUint。前処理・samplingのメモリ | P2 |
 | OPEN-07 | BFS辺出力規則 | 決定性・孤立成分・同点規則をfixture化 | P3前 |
 | OPEN-08 | Frontier Stateのbuffer方式 | owned State baseline。allocation profileで判断 | P3 |
 | OPEN-09 | crate名の登録状況 | zdd-familyを希望。未登録という主張はまだしない | 公開前 |
 | OPEN-10 | MSRV・依存version | 必要機能と全default依存のMSRVから最小stableを選択 | 最初のリリース前 |
-| OPEN-11 | error enumと統計型の詳細 | non_exhaustive、問題固有Errorの保持、エラー時のstats | P1/P3 |
+| OPEN-11 | error enumと統計型の詳細 | **解決（2026-09-12）**: public errorはnon_exhaustive、`Problem(E)`は元値を保持、limit/cancel/Problemは途中statsを保持。解なしは成功値。[エラー契約](api.md#10-エラーの分類) | P0終了 |
 | OPEN-12 | 将来の空Graphのspanning tree | 数学的慣習と他APIの整合性。1頂点は空解一つ | 機能追加前 |
 
 本表の内部選択は仕様に反しない範囲で検証して決める。未決を理由にユーザーへ毎回確認を求めるのではなく、比較結果と推奨理由を記録する。目的や公開意味論の変更が必要な場合は仕様変更として扱う。
@@ -120,7 +120,7 @@ workspace分割を初期要件にしない。将来xtask/fuzz用の非公開pack
 
 featureの初期案はdefaultに`graph`（Graph APIとFrontier）、optionalに`sampling`。graph無効でもFamilyのみを利用できる。Frontierは製品のdefault機能から外さない。petgraph adapterとserialization featureは対応実装時に追加する。
 
-自作coreの依存候補はhashbrown、num-bigint、必要なnumeric補助。RNG関連はoptional。同期ライブラリはOPEN-03で選ぶ。OxiDD採用時は重複する依存・機構を減らす。criterion/proptest/fuzzing関連は開発依存。
+専用coreへ切り替える場合の依存候補はhashbrown、num-bigint、必要なnumeric補助。RNG関連はoptional。OxiDD採用時は重複する依存・同期機構を減らす。criterion/proptest/fuzzing関連は開発依存。
 
 ## 7. OSS運用方針
 
