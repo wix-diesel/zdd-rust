@@ -1,6 +1,6 @@
-# 公開API案
+# 公開API契約
 
-状態: 未実装のAPI案。名前・シグネチャは実装前レビューで調整可能。意味論は[仕様](specification.md)に従う。
+状態: P0公開契約確定、実装未着手。細かな名前・引数配置は実装時に調整できるが、本書に記載した所有権、context検査、失敗分類、上限の計数方法は互換性契約として扱う。意味論は[仕様](specification.md)に従う。
 
 ## 1. 型と公開範囲
 
@@ -16,9 +16,55 @@
 | `GraphSpace` | GraphをFamilySpaceへ結び付ける高水準入口 |
 | `EdgeFamily`, `EdgeSolution` | 元Graphの対応を持つFamilyと所有されたEdgeId列 |
 | `FrontierBuilder`, `FrontierProblem` | 独自問題の入口 |
-| `Limits`, `QueryLimits`, `BuildStats`等 | 制限と統計。ノード数と解数を区別 |
+| `Limits`, `QueryLimits` | space/操作とqueryの有限な既定上限 |
+| `SpaceStats`, `OperationStats`, `BuildStats`, `QueryStats` | manager全体と一操作の統計。ノード数と解数を区別 |
+| `CancellationToken` | clone可能な協調キャンセルhandle |
 
 NodeId、Level、arena、cache型、backendのmanager型は公開しない。v1のFamilyはVariableIdを要素とする。任意ラベルは利用側の対応表で解決でき、Graphへの変換は不要。ラベルgeneric型を各ノードへ格納しない。
+
+### 1.1 所有権、clone、drop
+
+- `FamilySpace::clone`と`GraphSpace::clone`はO(1)で、同一のmanager/contextを共有する。cloneから作ったFamily同士は直接演算できる。
+- `SetFamily::clone`と`EdgeFamily::clone`はimmutableな同じrootの所有権を増やすO(1)操作であり、DAGを複製しない。すべての演算・filterは新しいrootを返し、入力rootを変更しない。
+- Familyはspace handleを内部所有する。元の`FamilySpace`/`GraphSpace`変数を先にdropしてもFamilyは有効である。iterator/indexは必要なDAGとmappingを別途所有するため、最後のFamilyとspaceをdropしてmanagerが解放された後も有効である。
+- iteratorと`CountIndex`は構築時に対象rootのlocal snapshotとID mappingを所有する。元Familyをdropしても利用でき、managerの生NodeIdやguardを呼び出し間へ保持しない。所有された`Solution`/`EdgeSolution`は元Familyから独立する。
+- Familyをdropしても、共有manager上の別rootと共有するノードは当然保持される。到達不能ノードをいつ回収するかはbackendの内部事項であり、drop直後のメモリ減少は保証しない。
+
+```rust,ignore
+let space = FamilySpace::new(2)?;
+let same_space = space.clone();
+let a = space.variable(0)?;
+let original = space.from_sets([vec![a]])?;
+let derived = original.union(&same_space.unit())?;
+
+// 演算は入力を変更せず、space handleよりFamilyの方が長く生存できる。
+assert!(original.contains(&[a])?);
+drop(space);
+drop(same_space);
+assert!(original.contains(&[a])?);
+assert_eq!(derived.count(), BigUint::from(2u32));
+```
+
+### 1.2 contextと軽量ID
+
+`VariableId`、`VertexId`、`EdgeId`は相互変換を実装しない別のopaque newtypeで、比較・hash・copyが可能な軽量indexとする。値を直接構築するpublic constructorは提供せず、対応するspace/graphの`variable`、`vertex_id`、`edge_id`から得る。`index() -> usize`は外部対応表の参照用に提供し、そのcontext内で元の入力位置を返すが、内部のnewtype表現やbackend IDではない。
+
+Family間の二項演算は、数値rootやuniverseサイズではなくmanager identityで同一spaceを実行時検査する。`EdgeFamily`間ではさらに同じGraph mappingであることを検査する。cloneはidentityを保ち、同じ入力から別々に作った二つのspaceは異なるidentityを持つ。
+
+軽量ID自体にはcontext tokenを埋め込まない。そのため、別space/graphから得た同種IDがたまたま範囲内なら、要素を一つ受けるAPIだけでは由来の違いを検出できない。これは利用契約であり、型安全性の保証外である。Family同士のcontext不一致を検出する保証や、範囲外IDを`InvalidElement`/`InvalidVertex`として拒否する保証とは区別する。contextを越える変換には[明示import](#8-importとcompaction)を使う。
+
+```rust,ignore
+let left_space = FamilySpace::new(1)?;
+let right_space = FamilySpace::new(1)?;
+let left = left_space.powerset()?;
+let right = right_space.powerset()?;
+
+assert!(matches!(left.union(&right), Err(Error::ContextMismatch { .. })));
+
+// 同じ整数indexに見えても、right側IDをleftの単項APIへ渡すのは利用契約違反。
+let right_id = right_space.variable(0)?;
+let _do_not_do_this = left.filter_contains(right_id);
+```
 
 ## 2. 非グラフ用途
 
@@ -162,20 +208,57 @@ compactionは同じspaceの複数rootをまとめて新spaceへ移し、root間�
 
 GraphSpaceでのcompactionはGraphと辺対応も保持した結果を返す。操作のために旧Graphの辺IDを再採番しない。単純なfree/GC操作ではなく、新しい所有領域への移動であることを名前・説明に明示する。
 
-## 9. エラーの分類
+## 9. 資源制限、統計、キャンセル
+
+`FamilySpace::new`は`Limits::default()`を使い、builderで`Limits`全体を差し替える。space作成後に上限は変更しない。FrontierBuilderはspaceの上限以下となる一操作用の値を指定できる。query用snapshotを作るAPIは`QueryLimits`を明示的に受ける。すべての数は`usize`で、backend型やbyte幅を公開しない。
+
+### 9.1 既定値
+
+| field | default | 計数対象と超過判定 |
+|---|---:|---|
+| `Limits::max_live_nodes` | 1,000,000 | manager内のliveな非terminal node。ZERO/ONEは除外し、space初期化用nodeは含む。unique-table hitは増やさず、新node登録前に判定 |
+| `Limits::max_operation_memo_entries` | 1,000,000 | 一つのsymbolic演算が保持するdistinct memo key。terminal shortcutとshared-cache hitは除外し、新key挿入前に判定 |
+| `Limits::max_frontier_states` | 1,000,000 | 一つの層に登録されたdistinctなcanonical State。rejectされたStateと既存Stateへのmergeは除外し、新State挿入前に判定 |
+| `Limits::max_frontier_transitions` | 10,000,000 | 一回のbuildで試みるinclude/exclude branchの累計。ユーザーtransitionを呼ぶ直前に1増やし、reject/merge/errorとなるbranchも含む |
+| `Limits::shared_cache_entries` | 262,144 | manager共有computed cacheの最大entry。0で無効。超過時はevictするため、この項目だけでは操作を失敗させない |
+| `QueryLimits::max_snapshot_nodes` | 1,000,000 | query local DAGのdistinctな非terminal node。snapshotへの新規登録前に判定 |
+| `QueryLimits::max_total_count_bits` | 67,108,864 | snapshotが保持する全ての部分解数について`BigUint::bits()`を合計した論理bit数。値0は0 bitとして、値を保存する前に判定 |
+
+上限値ちょうどまでは成功でき、次の対象を追加しようとした時点で失敗する。`max_live_nodes`は累積作成数ではないが、`nodes_created`統計はGC後も減らない累積値である。State上限は層ごとなので、`peak_frontier_states`は全層の最大、transition上限はbuild全体の累計となる。`max_total_count_bits`はallocator、capacity、一時加算領域を含むRSS上限ではない。
+
+space作成時、固定node capacityへ変換できない値と、universe初期化に必要なnode数が`max_live_nodes`を超える設定はmanagerを作る前に入力エラーとする。内部backendがterminalや予約slotを必要としてもpublicなnode計数へ加えない。予約に失敗した場合はpanicせず資源エラーを返す。
+
+### 9.2 統計の取得
+
+- `FamilySpace::stats() -> SpaceStats`は呼び出し時点のmanager全体のsnapshotを返す。少なくとも`live_nodes`、`peak_live_nodes`、`nodes_created`、shared-cacheのentry/hit/miss/eviction、GC回数を持つ。並行操作中の複数fieldを一つのtransaction時点として読むことは保証しない。
+- `OperationStats`は`nodes_before/after/created`、operation memoのpeak/hit、cache hit/miss、cancel check数を持つ。
+- `BuildStats`は`OperationStats`に、処理済み層、現在/peak State、試行transition、reject、mergeを加える。
+- `QueryStats`は到達/snapshot node、部分解数の合計bit数と最大bit数を持つ。
+
+通常の利便メソッドは成功値だけを返す。成功時の一操作統計が必要な場合は同名の`*_with_stats`入口を使い、`value`とstatsを持つreportを受け取る。資源超過、キャンセル、ユーザー問題による失敗は、失敗直前までの対応するstatsを必ずerrorに含む。統計は診断用であり、backend変更後もfieldの意味は維持するが、cache hit数やGC時期の完全再現性は保証しない。
+
+`CancellationToken`は`Clone + Send + Sync`で、`cancel()`後は解除できない。tokenを受ける各bounded APIは、明示stack frame、Frontier branch、またはsnapshot nodeを一つ処理するごとに少なくとも一度確認する。キャンセルは協調的で即時完了時間を保証しない。tokenを省略したAPIはキャンセルされない。
+
+## 10. エラーの分類
 
 | 分類 | 例 |
 |---|---|
 | 入力 | InvalidVertex、InvalidElement、SelfLoop、DuplicateEdge、InvalidRange |
 | space/順序 | ContextMismatch、InvalidVariableMap、OrderMismatch、InvalidEdgeOrder |
-| 資源 | NodeLimit、StateLimit、TransitionLimit、MemoLimit、QueryLimit |
+| 資源 | `LimitExceeded { kind: Node/State/Transition/Memo/QueryNodes/CountBits, limit, attempted, stats }` |
 | 制御 | Cancelled |
 | 数値 | CountOverflow。将来WeightOverflow、InvalidWeight |
-| ユーザー問題 | `BuildError<E>::Problem(E)`で元エラーを保持 |
+| ユーザー問題 | `BuildError<E>::Problem { source: E, stats: BuildStats }`で元エラーを保持 |
 
-public error enumは拡張性を考慮したnon_exhaustiveを候補とする。通常の解なしはエラーにしない。失敗後の既存Familyの意味を維持するが、未使用の有効ノードが残る場合がある。
+公開enumの`Error`、`BuildError<E>`、`QueryError`、`CountError`は`#[non_exhaustive]`とする。`BuildError<E>`はlibrary側の入力/context/資源/キャンセルと`Problem(E)`を区別し、`QueryError`はquery資源超過とキャンセル、`CountError`はu128 overflowを区別する。`source`は型消去や文字列化をせず保持する。呼び出し側は将来variant追加に備えてwildcard armを持つ。
 
-## 10. v1.x以降のAPI候補
+「有効な結果が存在しない」ことは失敗と分ける。Familyを構築する操作の通常の解なしは`Ok(ZERO)`、空Familyから一解を得るsamplingは`Ok(None)`、visitorの利用者都合の停止は成功した`ControlFlow::Break`である。これらを`BuildError`、`Cancelled`、limit超過へ変換しない。
+
+入力/context errorはユーザー処理を始める前に可能な限り検証する。資源超過とキャンセルは近似Familyや部分的な成功値を返さず、途中statsだけを返す。ユーザーcallbackのpanicはcatchして`Problem`へ変換せず、そのままunwindする。公開errorにlock poisoningやbackend固有のOOM型を露出させない。
+
+すべての失敗で、呼び出し前から存在するFamilyのrootと意味、およびmanagerのcanonicalization不変条件を維持する。失敗した演算の公開rootは作らない。一方、失敗前に正規化済みで登録されたnodeやcache entryは別のrootから未到達でもmanagerに残り得るため、`SpaceStats::live_nodes`が増える場合がある。v1はこの増分のrollbackを保証しない。
+
+## 11. v1.x以降のAPI候補
 
 - `rank(&solution) -> Result<Option<BigUint>, ...>`: 非メンバーはNone、入力不正はErr。
 - `unrank(&BigUint) -> Result<Solution, ...>`: `rank >= count`は範囲外エラー。

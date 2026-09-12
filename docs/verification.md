@@ -34,6 +34,25 @@ ZDD構造、Family意味論、Frontier Stateの十分性、組み込み問題の
 | ZF-ERR-001, ZF-ERR-002 | エラー分類、キャンセル、失敗後の既存Family・manager整合性 |
 | ZF-CONC-001, ZF-CONC-002 | 同時query/write、独立space、iterator/visitor/RNG内からの再入でdeadlockしない |
 
+### Issue #4公開契約のfixture
+
+実装時は次をcompile testまたはintegration testとして固定する。
+
+| 契約 | 必須ケース |
+|---|---|
+| clone/drop | space cloneから作ったFamily同士が演算可能。space handleと元Familyをdropした後も、Family clone、初期化済みiterator、CountIndex、所有Solutionが有効 |
+| context | 同一spaceは成功。同じuniverse/orderから別々に作ったspaceは`ContextMismatch`。EdgeFamilyはGraph mapping違いも拒否。明示import後だけ成功 |
+| 軽量ID | 3種のIDが型として混在不能。範囲外IDは拒否。別context由来でも同種かつ範囲内のIDを検出できないという制限をrustdoc compile exampleで明記 |
+| immutable root | 成功、各limit超過、cancel、Problem errorの前後で既存rootの列挙集合が一致。失敗後に同じspaceで別の演算が成功 |
+| 解なしとの区別 | disconnected pathと矛盾filterは`Ok(ZERO)`、空Familyのsampleは`Ok(None)`。不正端点、limit、cancel、Problemはそれぞれ別variant |
+| limit境界 | 各計数対象について0、limit-1、limitちょうど、次の追加を検証。unique hit/merge/reject/cache eviction/terminalが該当counterへ入るかも個別確認 |
+| 途中stats | limit/cancel/Problemのerror内counterが実際に完了した作業だけを表し、manager-wide current/peak/cumulativeと混在しない |
+| guard境界 | callback、RNG、iterator利用、Frontier transition/Hash/Eq/canonicalizeから同じspaceへ再入。同じmanagerの並行read/writeと別manager間importでdeadlockしない |
+| panic/poison | callbackを`catch_unwind`で外から捕捉した後もspaceが利用可能。公開error/debug表示にbackend lock型や`PoisonError`を露出しない |
+| 残存node | node生成後に意図的にlimit/cancelで失敗させ、既存rootと不変条件を確認。`live_nodes`増加は許容し、近似rootが返らないことを確認 |
+
+default値そのものもassertし、`usize`からbackend capacityへの境界（0、universe初期化に不足、変換不能、予約失敗）をmanager作成前のerrorとして検証する。default変更時はAPI契約、ADR、fixtureを同じ変更で更新する。
+
 ## 3. ZDD core
 
 unit testで少なくとも次を確認する。
