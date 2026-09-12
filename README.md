@@ -4,7 +4,7 @@
 
 Frontier-based Searchを、グラフの解集合を効率よく構築する中核機能として提供します。構築後は同じSet Family APIで条件を追加し、集合族を再利用できることを目指します。将来は加法重みによる最適化、rank/unrank、weighted samplingへ拡張します。
 
-**現在は仕様・設計とbackend評価の段階です。製品crate、公開crate、動作する製品APIはまだありません。** Rustコードは再現用のbackend評価ハーネスだけです。以下の名称・コード例は設計案であり、インストール手順ではありません。プロジェクト名・公開crate名の予定は`zdd-family`、Rustでのimport名の予定は`zdd_family`です。crate名の登録状況は公開前に確認します。
+**現在は`zdd-family` crateの骨格とCIを導入した段階です。製品APIはまだありません。** そのため、以下のコード例は設計案であり、インストール手順ではありません。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
 
 ## 設計方針
 

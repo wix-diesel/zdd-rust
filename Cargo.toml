@@ -1,0 +1,23 @@
+[package]
+name = "zdd-family"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+description = "A Rust library for representing and manipulating set families with ZDDs"
+license = "Apache-2.0"
+repository = "https://github.com/wix-diesel/zdd-rust"
+readme = "README.md"
+keywords = ["zdd", "decision-diagram", "combinatorics"]
+categories = ["data-structures", "mathematics"]
+
+[features]
+default = ["graph"]
+# Graph and frontier APIs will be added behind this feature in subsequent issues.
+graph = []
+# Sampling will remain opt-in until its API is implemented.
+sampling = []
+
+[dependencies]
+# Keep the backend private so the public API can remain backend-independent.
+# See docs/dependencies.md for the version, MSRV, and license rationale.
+oxidd = { version = "0.12.0", git = "https://github.com/OxiDD/oxidd.git", rev = "be2f69bd704a4b9baf993fe54ff92c7ca17bb177", default-features = false, features = ["manager-index", "zbdd", "apply-cache-direct-mapped"] }
