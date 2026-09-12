@@ -15,11 +15,13 @@
 | P6: 後続v1.x | connected subgraphs、任意端点path、independent sets、adapter、ordering改善 | 辺/頂点Familyの型と対応が自然に共存 |
 | P7: future | top-k、weighted sampling、並列化、高度GC、外部メモリ、coloring | 実需要とbenchmarkから優先順位を決定 |
 
-P0の検証コードも実装開始後の作業であり、今回の文書作成に含めない。
+P0のbackend評価コードは[専用ハーネス](../tools/backend-evaluation/README.md)として実行済み。製品crateの実装はP1から開始する。
 
 ## 2. backend選定ゲート
 
-OxiDD再利用と専用coreを、同じ意味論・同じ状態生成器で比較する。少なくとも次を確認する。
+このゲートは2026-09-12に完了し、初期backendとしてOxiDDを採用した。比較対象、再現方法、適合性、性能、依存・ライセンス、再評価条件は[Backend適合性評価](backend-evaluation.md)に記録する。
+
+選定ではOxiDD再利用と専用coreを、同じ意味論・同じ状態生成器で比較した。少なくとも次を確認した。
 
 1. ZERO/unit/powersetと省略変数の意味が一致するか。
 2. 同じmanagerに複数Familyを構築して共有できるか。
@@ -30,6 +32,14 @@ OxiDD再利用と専用coreを、同じ意味論・同じ状態生成器で比�
 7. 反復filter workflowの時間・ピークRSS・実装量・保守負担。
 
 専用coreを採用するなら、なぜ既存基盤では目的に合わないか、または専用設計の利益が保守負担を上回るかを記録する。Frontierに時間の大半を使うなら、エンジン最適化を主課題と誤認しない。
+
+選定に合わせ、後続タスクの内部実装範囲を次のように読み替える。公開要件とIssueの完了条件は変更しない。
+
+- #4ではOxiDDの固定node capacityを公開`NodeLimit`へ安全に対応させ、変数数分のtautology nodeを確保できない設定をmanager作成前に拒否する。
+- #5ではOxiDDをprivate dependencyとして最小featureで固定し、依存license・advisory検査をCIへ加える。
+- #6/#7では新しいarena/GCを実装せず、terminal対応、space検査、root所有と、limit/cancel対応の明示stack adapterを実装する。OxiDD builtin applyは制限なし経路の比較対象に留められる。
+- #9/#10/#11ではmanager guard中に到達DAGをlocal snapshotへ写し、cardinality、CountIndex、iteratorが生のOxiDD node IDを長期保持しないようにする。
+- #20のimport/compactionはsource snapshotからdestination managerへ再構築し、異なるmanagerのguardを同時に保持しない。
 
 ## 3. v1受入条件
 
@@ -50,7 +60,7 @@ OxiDD再利用と専用coreを、同じ意味論・同じ状態生成器で比�
 
 | ID | 未決事項 | 初期候補 / 判断基準 | 決定期限 |
 |---|---|---|---|
-| OPEN-01 | backend | OxiDDと専用core。前節の適合性・性能・保守負担 | P0終了 |
+| OPEN-01 | backend | **解決（2026-09-12）**: OxiDDをprivate dependencyとして採用。[比較記録](backend-evaluation.md)のgateで切替可能 | P0終了 |
 | OPEN-02 | 自作時のnode幅・配置 | u32 / 12-byte候補。容量、layout、peak RSS | P1のlayout固定前 |
 | OPEN-03 | 自作時の同期実装 | coarse read/write。再入、poison方針、同期コスト | P0/P1 |
 | OPEN-04 | public limitsとdefault値 | 項目ごとの計数、既存rootへの影響、失敗統計 | P1 |
@@ -129,4 +139,4 @@ featureの初期案はdefaultに`graph`（Graph APIとFrontier）、optionalに`
 | 32-bit | checked変換とサイズ境界をcheck/test。主性能測定は64-bit |
 | ドキュメント言語 | 公開README/rustdocは英語を基本とする予定。現在の設計書は日本語 |
 
-仕様書段階ではCargo.toml、CI、Rust examplesを存在するものとして扱わない。公開準備でREADMEの状態表示とAPI例を実装に合わせて更新する。
+backend評価用Cargo.tomlは製品crateではない。製品crate、CI、Rust examplesはP1以降に追加し、公開準備でREADMEの状態表示とAPI例を実装に合わせて更新する。

@@ -1,0 +1,9 @@
+[package]
+name = "backend-evaluation"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+oxidd = { git = "https://github.com/OxiDD/oxidd.git", rev = "be2f69bd704a4b9baf993fe54ff92c7ca17bb177", default-features = false, features = ["manager-index", "zbdd", "apply-cache-direct-mapped"] }
+oxidd-rules-zbdd = { git = "https://github.com/OxiDD/oxidd.git", rev = "be2f69bd704a4b9baf993fe54ff92c7ca17bb177" }

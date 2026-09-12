@@ -13,9 +13,10 @@
 3. [アーキテクチャ](architecture.md): どこが何を所有・実行するか。
 4. [Frontier設計](frontier.md): 問題定義と構築器の契約。
 5. [設計判断](decisions.md): 選択の理由と代替案。
-6. [検証計画](verification.md): 正しいこと・性能をどう確認するか。
-7. [ロードマップ](roadmap.md): 着手順序と未決事項。
-8. [関連OSS](related-work.md): 比較の根拠。
+6. [Backend適合性評価](backend-evaluation.md): OxiDDと専用coreの比較・採用結果。
+7. [検証計画](verification.md): 正しいこと・性能をどう確認するか。
+8. [ロードマップ](roadmap.md): 着手順序と未決事項。
+9. [関連OSS](related-work.md): 比較の根拠。
 
 ## 文書の位置付け
 

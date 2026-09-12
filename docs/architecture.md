@@ -40,7 +40,7 @@ spaceの同一性はmanagerの所有インスタンスに結び付ける。別sp
 
 ## 3. backend境界
 
-エンジン選択は未決。OxiDD再利用と小さな専用coreを比較する。必要な内部能力は次の範囲とする。
+[ADR-013の適合性評価](backend-evaluation.md)により、初期backendにはOxiDDをprivate dependencyとして採用する。必要な内部能力は次の範囲とする。
 
 - 順序付きのZDDノード作成とcanonical rootの保持。
 - ノードの安全な読み取り、子の取得。
@@ -49,9 +49,9 @@ spaceの同一性はmanagerの所有インスタンスに結び付ける。別sp
 - 資源制限と統計。
 - 同じmanagerへ複数のFrontier結果を登録すること。
 
-publicなFamily APIにOxiDDの型、pointer/index幅、cache型、GC方式を露出させない。OxiDDを使う場合、ZERO、unit、powersetの意味が本仕様と一致するようadapterを検証する。基盤のGC/同期規則を無視した独自IDの長期保持や二重lockを行わない。
+publicなFamily APIにOxiDDの型、pointer/index幅、cache型、GC方式を露出させない。ZERO、unit、powersetの意味が本仕様と一致するようadapterで検証する。基盤のGC/同期規則を無視した独自IDの長期保持や二重lockを行わない。strictなmemo limit・キャンセル・深いstack回避が必要な演算は、OxiDDをnode storeとreductionに使いながらadapter所有の明示stack/memoで実装する。
 
-以下のarena・table・同期の詳細は**専用coreを採用した場合の初期設計**である。
+以下のarena・table・同期の詳細は、評価で不適合が判明して**専用coreへ切り替える場合の代替設計**として保持する。
 
 ## 4. ノード・ID・不変条件
 
