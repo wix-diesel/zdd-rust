@@ -21,8 +21,10 @@ operationの実装可能性が公開条件と衝突した場合は、同評価�
 ## ライセンスと安全性
 
 本プロジェクトはApache-2.0を維持する。製品crateの通常依存はApache-2.0、MIT、
-Unicode-3.0、Zlibのみを許可し、CIでadvisoryとlicenseを検査する。新しい依存や
-取り込みコードを追加する際は、ライセンスとNOTICEの要否を確認してこの方針を更新する。
+Unicode-3.0、Zlibのみを許可し、CIでadvisory、license、依存sourceを検査する。Git
+sourceはcommit固定済みのOxiDD repositoryだけを許可する。新しい依存や取り込みコードを
+追加する際は、ライセンスとNOTICEの要否を確認してこの方針を更新する。
 
 OxiDDを含め、必須のC/C++ FFI依存は導入しない。自作コードはcrate rootの
-`#![forbid(unsafe_code)]`によりunsafeをコンパイル時に禁止する。
+`#![forbid(unsafe_code)]`によりunsafeをコンパイル時に禁止する。CIは通常・build依存を
+含むdependency metadataを検査し、`*-sys`、`*-ffi`、C/C++ binding/build toolを拒否する。
