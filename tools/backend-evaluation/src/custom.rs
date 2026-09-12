@@ -61,6 +61,14 @@ impl Core {
         Ok(root)
     }
 
+    fn powerset(&mut self, variables: u32) -> Result<usize, &'static str> {
+        let mut root = ONE;
+        for variable in (0..variables).rev() {
+            root = self.make_node(variable, root, root)?;
+        }
+        Ok(root)
+    }
+
     fn union(&mut self, left: usize, right: usize) -> Result<usize, &'static str> {
         fn apply(
             core: &mut Core,
@@ -199,6 +207,14 @@ pub struct ResultRow {
 }
 
 pub fn run(variables: u32, rounds: u32, sets: &[u64]) -> Result<ResultRow, &'static str> {
+    let mut semantics = Core::new(256);
+    assert_eq!(semantics.count(ZERO), 0);
+    assert_eq!(semantics.count(ONE), 1);
+    let powerset = semantics.powerset(4)?;
+    assert_eq!(semantics.count(powerset), 16);
+    let skipped = semantics.singleton_set(0b1000, 4)?;
+    assert_eq!(semantics.count(skipped), 1);
+
     let mut core = Core::new(1_000_000);
     let start = Instant::now();
     let mut root = ZERO;

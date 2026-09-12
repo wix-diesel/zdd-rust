@@ -4,7 +4,7 @@
 
 Frontier-based Searchを、グラフの解集合を効率よく構築する中核機能として提供します。構築後は同じSet Family APIで条件を追加し、集合族を再利用できることを目指します。将来は加法重みによる最適化、rank/unrank、weighted samplingへ拡張します。
 
-**現在は仕様・設計段階です。Rust実装、公開crate、動作するAPIはまだありません。** 以下の名称・コード例は設計案であり、インストール手順ではありません。プロジェクト名・公開crate名の予定は`zdd-family`、Rustでのimport名の予定は`zdd_family`です。crate名の登録状況は公開前に確認します。
+**現在は仕様・設計とbackend評価の段階です。製品crate、公開crate、動作する製品APIはまだありません。** Rustコードは再現用のbackend評価ハーネスだけです。以下の名称・コード例は設計案であり、インストール手順ではありません。プロジェクト名・公開crate名の予定は`zdd-family`、Rustでのimport名の予定は`zdd_family`です。crate名の登録状況は公開前に確認します。
 
 ## 設計方針
 
@@ -47,6 +47,7 @@ ZDDが小さくても解数は非常に大きい場合があります。`family.
 | [公開API案](docs/api.md) | 非グラフ用途、Graph API、query、型と失敗の契約 |
 | [Frontier設計](docs/frontier.md) | State、遷移、forget、正規化、併合、ordering |
 | [設計判断](docs/decisions.md) | 採用案、代替案、理由、欠点、変更可能性 |
+| [Backend適合性評価](docs/backend-evaluation.md) | OxiDDと専用coreの適合性・性能比較、採用結果 |
 | [検証計画](docs/verification.md) | 正当性、property test、fuzzing、benchmark |
 | [ロードマップ](docs/roadmap.md) | 実装フェーズ、1.0条件、未決事項、OSS運用 |
 | [関連OSS](docs/related-work.md) | 調査の要点と一次資料 |

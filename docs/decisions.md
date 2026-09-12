@@ -1,6 +1,6 @@
 # 主要設計判断
 
-状態: 初期採用方針。backend依存の項目は条件付き。意味論の根拠は[仕様](specification.md)。
+状態: 初期採用方針。backendは2026-09-12の適合性評価で決定済み。意味論の根拠は[仕様](specification.md)。
 
 ## 1. 製品・API
 
@@ -23,7 +23,7 @@
 
 | ID / 論点 | 採用案 | 代替案 | 採用理由 | デメリット | 将来変更可能か |
 |---|---|---|---|---|---|
-| ADR-013 backend | OxiDD再利用と専用coreを比較して決定 | 独自エンジンに固定 | 長寿命manager・演算の再利用価値が高い | 適合性検証が必要 | public型を隠して変更可能。未決 |
+| ADR-013 backend | private dependencyとしてOxiDDを採用 | 小さな専用core | 既存の正規化・演算・root/GC/cache・同期を再利用でき、[同一workload評価](backend-evaluation.md)でも高速 | MSRV 1.91、依存graph、厳密limitsにはadapter実装が必要 | public型を隠して変更可能。再評価gateは評価記録に固定 |
 | ADR-014 ノード | 専用coreならarena＋index | generational index、Rc、Arc、raw pointer、intrusive | locality、一括解放、safe実装 | 個別回収がない | layoutは内部変更可。寿命契約は維持 |
 | ADR-015 ID幅 | private NodeId u32を初期候補 | usize、u64 | ノード密度を優先 | ID上限がある | public表現を固定しなければ変更可 |
 | ADR-016 reduction | mk_nodeへ集約、hi=ZEROでlo | 各演算に規則を分散 | 不変条件を一か所で保証 | 共通入口の性能が重要 | 最適化しても意味は不変 |

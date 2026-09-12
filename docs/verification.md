@@ -1,6 +1,6 @@
 # 検証・benchmark計画
 
-状態: 実装前の計画。記載したテスト・benchmarkは未実行。
+状態: 実装前の全体計画。backendの最小適合性・micro benchmarkのみ[実行済み](backend-evaluation.md)で、以下の製品テスト・end-to-end benchmarkは未実行。
 
 ## 1. 検証の原則
 

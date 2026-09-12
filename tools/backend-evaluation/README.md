@@ -29,4 +29,3 @@ cargo build --release --manifest-path tools/backend-evaluation/Cargo.toml
 The micro workload isolates family construction and repeated filtering. It is
 not a claim about end-to-end Frontier performance; those baselines belong to
 the later implementation tasks.
-

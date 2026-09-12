@@ -8,7 +8,7 @@
 
 | OSS | 言語 / ZDD / Frontier | APIの軸 | zdd-familyとの関係 |
 |---|---|---|---|
-| [OxiDD](https://github.com/OxiDD/oxidd) | Rust / ZDDあり / 汎用Frontierは未確認 | manager・function・traitによるDD基盤 | backendの有力候補。Pure Rustだけでは差別化しない |
+| [OxiDD](https://github.com/OxiDD/oxidd) | Rust / ZDDあり / 汎用Frontierは未確認 | manager・function・traitによるDD基盤 | [適合性評価](backend-evaluation.md)で初期backendに採用。Pure Rustだけでは差別化しない |
 | [TdZdd](https://github.com/kunisura/TdZdd) | C++ header-only / ZDDあり / Frontierに適したspec | top-down構築、reduction、評価 | 独自State構築と正当性の参考 |
 | [Graphillion](https://github.com/graphillion/graphillion) | Python＋C/C++ / ZDDあり / Frontierあり | グラフ集合の構築・集合演算・抽出・最適化 | 製品思想の主な参考。Rust移植だけを目的にしない |
 | [CUDD](https://github.com/ssoelvsten/cudd) | C＋C++ wrapper / ZDDあり / 標準Frontierなし | DdManagerとDdNodeによるDD演算 | 成熟した演算基盤だがFFI不要方針では標準backendにしない |
@@ -58,7 +58,7 @@
 | Adiar | 主眼はI/O効率。内部fileを可搬な長期形式と同一視しない | 2026年更新を確認 | MIT。依存TPIEはLGPLv3 |
 | Rust zdd | thread-safe Factoryという説明。並列applyとは別。Graphviz | HEADは2020-05-06。作者が保守は限定的と説明 | MIT OR Apache-2.0 |
 
-保守状況は将来の保証ではない。根拠として[OxiDD確認commit](https://github.com/OxiDD/oxidd/commit/be2f69bd704a4b9baf993fe54ff92c7ca17bb177)、[TdZdd確認commit](https://github.com/kunisura/TdZdd/commit/95ad69d17cb375f4f87f282bf95e05b08cf53c09)、[Graphillion確認commit](https://github.com/graphillion/graphillion/commit/e21b0928fcacd955154032928044ea3ce2efee3c)、[CUDD fork確認commit](https://github.com/ssoelvsten/cudd/commit/309da49d91ac33be78e48e5f39f392fd89d1479c)、[BuDDy fork確認commit](https://github.com/ssoelvsten/buddy/commit/5aca063a4b2e90352480f3dd24daeb6dbefa2d33)、[SAPPOROBDD確認commit](https://github.com/Shin-ichi-Minato/SAPPOROBDD/commit/ba60086acace49b6137eda35a7c08ed2375a7e56)、[Adiar確認commit](https://github.com/ssoelvsten/adiar/commit/e1bb6a3bd458c50fb4fe23b39745b24383d30602)を参照できる。
+保守状況は将来の保証ではない。根拠として[OxiDD確認commit](https://github.com/OxiDD/oxidd/commit/be2f69bd704a4b9baf993fe54ff92c7ca17bb177)（crate version 0.12.0として[実行比較済み](backend-evaluation.md)）、[TdZdd確認commit](https://github.com/kunisura/TdZdd/commit/95ad69d17cb375f4f87f282bf95e05b08cf53c09)、[Graphillion確認commit](https://github.com/graphillion/graphillion/commit/e21b0928fcacd955154032928044ea3ce2efee3c)、[CUDD fork確認commit](https://github.com/ssoelvsten/cudd/commit/309da49d91ac33be78e48e5f39f392fd89d1479c)、[BuDDy fork確認commit](https://github.com/ssoelvsten/buddy/commit/5aca063a4b2e90352480f3dd24daeb6dbefa2d33)、[SAPPOROBDD確認commit](https://github.com/Shin-ichi-Minato/SAPPOROBDD/commit/ba60086acace49b6137eda35a7c08ed2375a7e56)、[Adiar確認commit](https://github.com/ssoelvsten/adiar/commit/e1bb6a3bd458c50fb4fe23b39745b24383d30602)を参照できる。
 
 SylvanのREADMEにはZDDが別branchという古い説明が残るが、[現行build定義](https://github.com/trolando/sylvan/blob/master/src/CMakeLists.txt)と[CHANGELOG](https://github.com/trolando/sylvan/blob/master/CHANGELOG.md)で本体への組み込みを確認した。READMEだけを根拠にZDDなしとしない。
 
