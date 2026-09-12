@@ -239,10 +239,12 @@ pub fn run(variables: u32, rounds: u32, sets: &[u64]) -> Result<ResultRow, &'sta
     let filters = start.elapsed();
 
     // A failed operation may leave valid nodes, but must not alter old roots.
+    // Keep this check independent of the workload's CLI-controlled universe.
+    const LIMIT_CHECK_VARIABLES: u32 = 8;
     let mut limited = Core::new(4);
-    let stable = limited.singleton_set(1, variables)?;
+    let stable = limited.singleton_set(1, LIMIT_CHECK_VARIABLES)?;
     let before = limited.count(stable);
-    let failure = limited.singleton_set(u64::MAX, variables);
+    let failure = limited.singleton_set(u64::MAX, LIMIT_CHECK_VARIABLES);
     assert!(failure.is_err());
     assert_eq!(limited.count(stable), before);
 
