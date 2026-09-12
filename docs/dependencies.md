@@ -2,9 +2,10 @@
 
 ## MSRV
 
-このcrateのMSRVはRust 1.91であり、`Cargo.toml`の`rust-version`とCIで固定する。
-初期backendであるOxiDD 0.12.0がRust 1.91を要求するためである。MSRVを上げる場合は、
-依存関係を含む根拠を記録し、1.xではminor releaseでのみ変更する。
+このcrateのMSRVはRust 1.98であり、`Cargo.toml`の`rust-version`とCIで固定する。
+初期backendであるOxiDD 0.12.0の要求（Rust 1.91）を満たしつつ、現在のプロジェクト基準を
+Rust 1.98とする。MSRVを上げる場合は、依存関係を含む根拠を記録し、1.xではminor releaseで
+のみ変更する。
 
 ## 初期backend
 
@@ -14,7 +15,7 @@ commit `be2f69bd704a4b9baf993fe54ff92c7ca17bb177`へ固定する。使用feature
 BDD/MTBDD、並列apply、DDDMP、Graphviz機能を有効にしない。
 
 この選択は[backend適合性評価](backend-evaluation.md)の同一workload比較、正規化・
-root管理・cacheを再利用できること、およびRust 1.91というMSRVを根拠とする。公開前には
+root管理・cacheを再利用できること、およびRust 1.98というMSRVを根拠とする。公開前には
 crateの公開版とlockfileを再確認する。OxiDDのMSRV、依存ライセンス、またはbounded
 operationの実装可能性が公開条件と衝突した場合は、同評価に定めた再評価gateに従う。
 

@@ -58,12 +58,12 @@ jobs:
           - { os: macos-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
           - { os: windows-latest, toolchain: stable, feature_set: default, cargo_args: "" }
           - { os: windows-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
-          - { os: ubuntu-latest, toolchain: "1.91", feature_set: default, cargo_args: "" }
-          - { os: ubuntu-latest, toolchain: "1.91", feature_set: no-default-features, cargo_args: --no-default-features }
-          - { os: macos-latest, toolchain: "1.91", feature_set: default, cargo_args: "" }
-          - { os: macos-latest, toolchain: "1.91", feature_set: no-default-features, cargo_args: --no-default-features }
-          - { os: windows-latest, toolchain: "1.91", feature_set: default, cargo_args: "" }
-          - { os: windows-latest, toolchain: "1.91", feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: ubuntu-latest, toolchain: "1.98", feature_set: default, cargo_args: "" }
+          - { os: ubuntu-latest, toolchain: "1.98", feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: macos-latest, toolchain: "1.98", feature_set: default, cargo_args: "" }
+          - { os: macos-latest, toolchain: "1.98", feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: windows-latest, toolchain: "1.98", feature_set: default, cargo_args: "" }
+          - { os: windows-latest, toolchain: "1.98", feature_set: no-default-features, cargo_args: --no-default-features }
 
     steps:
       - name: Check out repository
