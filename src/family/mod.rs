@@ -192,7 +192,7 @@ impl FamilySpace {
         let root = self
             .inner
             .manager
-            .from_sets(&normalized)
+            .build_from_sets(&normalized)
             .map_err(|_| Error::LimitExceeded {
                 kind: LimitKind::Node,
                 limit: self.inner.limits.max_live_nodes,
