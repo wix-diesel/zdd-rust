@@ -295,10 +295,12 @@ mod tests {
         let space = small_space(0);
         assert!(space.empty().is_empty());
         assert!(!space.unit().is_empty());
-        assert!(space
-            .inner
-            .manager
-            .roots_equal(&space.powerset().unwrap().root, &space.unit().root));
+        assert!(
+            space
+                .inner
+                .manager
+                .roots_equal(&space.powerset().unwrap().root, &space.unit().root)
+        );
     }
 
     #[test]
