@@ -1,13 +1,14 @@
 //! `zdd-family` is a library for representing set families with
 //! zero-suppressed decision diagrams (ZDDs).
 //!
-//! The crate skeleton intentionally exposes no product API yet. Subsequent
-//! issues will add the documented API incrementally.
+//! Start with [`FamilySpace`] to create immutable [`SetFamily`] values.
 
 #![forbid(unsafe_code)]
 
 mod family;
 mod zdd;
+
+pub use family::{Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, SetFamily, VariableId};
 
 #[cfg(feature = "graph")]
 mod frontier;
