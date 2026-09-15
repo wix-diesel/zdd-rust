@@ -79,7 +79,7 @@ impl ZddManager {
         Root(self.powerset.clone())
     }
 
-    pub(crate) fn from_sets(&self, sets: &[Vec<u32>]) -> Result<Root, OutOfMemory> {
+    pub(crate) fn build_from_sets(&self, sets: &[Vec<u32>]) -> Result<Root, OutOfMemory> {
         let mut family = self.empty().0;
         for set in sets {
             let singleton = self.manager.with_manager_shared(|backend| {
@@ -140,9 +140,9 @@ mod tests {
     fn unique_table_reuses_nodes_and_lo_equals_hi_is_preserved() {
         let manager = ZddManager::new(1, 16, 8).unwrap();
         let before = manager.inner_node_count();
-        let first = manager.from_sets(&[vec![], vec![0]]).unwrap();
+        let first = manager.build_from_sets(&[vec![], vec![0]]).unwrap();
         let after_first = manager.inner_node_count();
-        let second = manager.from_sets(&[vec![0], vec![]]).unwrap();
+        let second = manager.build_from_sets(&[vec![0], vec![]]).unwrap();
 
         assert_eq!(manager.count(&first), 2);
         assert!(manager.roots_equal(&first, &second));
@@ -157,8 +157,8 @@ mod tests {
         let sets: Vec<Vec<u32>> = (0u32..512)
             .map(|bits| (0..10).filter(|v| bits & (1 << v) != 0).collect())
             .collect();
-        let first = manager.from_sets(&sets).unwrap();
-        let second = manager.from_sets(&sets).unwrap();
+        let first = manager.build_from_sets(&sets).unwrap();
+        let second = manager.build_from_sets(&sets).unwrap();
         assert!(manager.roots_equal(&first, &second));
         assert_eq!(manager.count(&first), 512);
     }
