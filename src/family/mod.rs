@@ -4,7 +4,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::zdd::{ApplyError, ApplyOp, ApplyStats, CreateError, Root, ZddManager};
+use crate::zdd::{ApplyError, ApplyOp, ApplyStats, CreateError, FilterSpec, Root, ZddManager};
 
 /// An element identifier in a [`FamilySpace`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -134,6 +134,14 @@ pub enum Error {
         /// The number of variables in the destination universe.
         variable_count: usize,
     },
+    /// A closed cardinality range has its lower endpoint above its upper endpoint.
+    #[non_exhaustive]
+    InvalidRange {
+        /// Inclusive lower endpoint.
+        start: usize,
+        /// Inclusive upper endpoint.
+        end: usize,
+    },
     /// Two families belong to different spaces.
     #[non_exhaustive]
     ContextMismatch {},
@@ -163,6 +171,9 @@ impl fmt::Display for Error {
                 formatter,
                 "element index {index} is outside a universe of {variable_count} variables"
             ),
+            Self::InvalidRange { start, end } => {
+                write!(formatter, "invalid closed range {start}..={end}")
+            }
             Self::LimitExceeded {
                 kind,
                 limit,
@@ -205,6 +216,11 @@ pub struct FamilySpaceBuilder {
 pub struct SetFamily {
     space: Arc<SpaceInner>,
     root: Root,
+}
+
+/// Builder-like view for filtering a family by the number of selected elements.
+pub struct CardinalityFilter<'a> {
+    family: &'a SetFamily,
 }
 
 impl FamilySpace {
@@ -435,6 +451,39 @@ impl SetFamily {
         Ok(self.space.manager.contains(&self.root, &normalized))
     }
 
+    /// Keeps only sets containing `element`, without removing it from the sets.
+    pub fn filter_contains(&self, element: VariableId) -> Result<Self, Error> {
+        self.validate_element(element)?;
+        self.filter(FilterSpec::Contains(element.0))
+    }
+
+    /// Keeps only sets that do not contain `element`.
+    pub fn filter_excludes(&self, element: VariableId) -> Result<Self, Error> {
+        self.validate_element(element)?;
+        self.filter(FilterSpec::Excludes(element.0))
+    }
+
+    /// Keeps only sets that are subsets of `elements`.
+    pub fn filter_subsets_of(&self, elements: &[VariableId]) -> Result<Self, Error> {
+        let normalized = self.normalize_elements(elements)?;
+        self.filter(FilterSpec::Subsets(&normalized))
+    }
+
+    /// Keeps only sets that are supersets of `elements`.
+    pub fn filter_supersets_of(&self, elements: &[VariableId]) -> Result<Self, Error> {
+        let normalized = self.normalize_elements(elements)?;
+        if normalized.is_empty() {
+            return Ok(self.clone());
+        }
+        self.filter(FilterSpec::Supersets(&normalized))
+    }
+
+    /// Starts a cardinality filter over the number of elements in each set.
+    #[must_use]
+    pub fn cardinality(&self) -> CardinalityFilter<'_> {
+        CardinalityFilter { family: self }
+    }
+
     /// Returns whether this family contains no sets.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -511,12 +560,121 @@ impl SetFamily {
         }
     }
 
+    fn filter(&self, spec: FilterSpec<'_>) -> Result<Self, Error> {
+        let nodes_before = self.space.manager.inner_node_count();
+        match self.space.manager.filter(
+            &self.root,
+            spec,
+            self.space.limits.max_operation_memo_entries,
+        ) {
+            Ok((root, _)) => Ok(Self {
+                space: Arc::clone(&self.space),
+                root,
+            }),
+            Err(ApplyError::MemoLimit { attempted, stats }) => {
+                let nodes_after = self.space.manager.inner_node_count();
+                Err(Error::LimitExceeded {
+                    kind: LimitKind::OperationMemo,
+                    limit: self.space.limits.max_operation_memo_entries,
+                    attempted,
+                    stats: Self::operation_stats(nodes_before, nodes_after, stats),
+                })
+            }
+            Err(ApplyError::NodeLimit { stats }) => {
+                let nodes_after = self.space.manager.inner_node_count();
+                Err(Error::LimitExceeded {
+                    kind: LimitKind::Node,
+                    limit: self.space.limits.max_live_nodes,
+                    attempted: self.space.limits.max_live_nodes.saturating_add(1),
+                    stats: Self::operation_stats(nodes_before, nodes_after, stats),
+                })
+            }
+        }
+    }
+
+    fn validate_element(&self, element: VariableId) -> Result<(), Error> {
+        if element.index() >= self.space.variable_count {
+            Err(Error::InvalidElement {
+                index: element.index(),
+                variable_count: self.space.variable_count,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn normalize_elements(&self, elements: &[VariableId]) -> Result<Vec<u32>, Error> {
+        let mut normalized = Vec::with_capacity(elements.len());
+        for &element in elements {
+            self.validate_element(element)?;
+            normalized.push(element.0);
+        }
+        normalized.sort_unstable();
+        normalized.dedup();
+        Ok(normalized)
+    }
+
     fn ensure_same_space(&self, other: &Self) -> Result<(), Error> {
         if Arc::ptr_eq(&self.space, &other.space) {
             Ok(())
         } else {
             Err(Error::ContextMismatch {})
         }
+    }
+}
+
+impl CardinalityFilter<'_> {
+    /// Keeps sets containing exactly `count` elements.
+    pub fn exactly(&self, count: usize) -> Result<SetFamily, Error> {
+        self.between(count..=count)
+    }
+
+    /// Keeps sets containing at most `count` elements.
+    pub fn at_most(&self, count: usize) -> Result<SetFamily, Error> {
+        if count >= self.family.space.variable_count {
+            Ok(self.family.clone())
+        } else {
+            self.family.filter(FilterSpec::Cardinality {
+                lower: 0,
+                upper: count,
+            })
+        }
+    }
+
+    /// Keeps sets containing at least `count` elements.
+    pub fn at_least(&self, count: usize) -> Result<SetFamily, Error> {
+        if count == 0 {
+            Ok(self.family.clone())
+        } else if count > self.family.space.variable_count {
+            Ok(SetFamily {
+                space: Arc::clone(&self.family.space),
+                root: self.family.space.manager.empty(),
+            })
+        } else {
+            self.family.filter(FilterSpec::Cardinality {
+                lower: count,
+                upper: self.family.space.variable_count,
+            })
+        }
+    }
+
+    /// Keeps sets whose cardinality lies in the inclusive `range`.
+    pub fn between(&self, range: std::ops::RangeInclusive<usize>) -> Result<SetFamily, Error> {
+        let (start, end) = range.into_inner();
+        if start > end {
+            return Err(Error::InvalidRange { start, end });
+        }
+        if start > self.family.space.variable_count {
+            return Ok(SetFamily {
+                space: Arc::clone(&self.family.space),
+                root: self.family.space.manager.empty(),
+            });
+        }
+        let end = end.min(self.family.space.variable_count);
+        self.family.filter(FilterSpec::Cardinality {
+            lower: start,
+            upper: end,
+        })
     }
 }
 
@@ -904,6 +1062,205 @@ mod tests {
 
         assert!(family.contains(&[c, a, c]).unwrap());
         assert!(!family.contains(&[a]).unwrap());
+    }
+
+    #[test]
+    fn all_filters_match_the_explicit_oracle_and_partition_families() {
+        let space = small_space(3);
+        let variables = (0..3)
+            .map(|index| space.variable(index).unwrap())
+            .collect::<Vec<_>>();
+
+        for mask in 0u64..=255 {
+            let oracle = OracleFamily::from_family_mask(3, mask);
+            let family = oracle.build_in(&space);
+
+            for (variable, &element) in variables.iter().enumerate() {
+                let containing = family.filter_contains(element).unwrap();
+                let excluding = family.filter_excludes(element).unwrap();
+                oracle
+                    .filter_contains(variable)
+                    .assert_matches(&space, &containing);
+                oracle
+                    .filter_excludes(variable)
+                    .assert_matches(&space, &excluding);
+                assert!(containing.intersection(&excluding).unwrap().is_empty());
+                assert!(
+                    containing
+                        .union(&excluding)
+                        .unwrap()
+                        .equivalent(&family)
+                        .unwrap()
+                );
+            }
+
+            for target in 0u64..8 {
+                let elements = (0..3)
+                    .rev()
+                    .filter(|variable| target & (1 << variable) != 0)
+                    .flat_map(|variable| [variables[variable], variables[variable]])
+                    .collect::<Vec<_>>();
+                oracle
+                    .filter_subsets_of(target)
+                    .assert_matches(&space, &family.filter_subsets_of(&elements).unwrap());
+                oracle
+                    .filter_supersets_of(target)
+                    .assert_matches(&space, &family.filter_supersets_of(&elements).unwrap());
+            }
+
+            for lower in 0..=4 {
+                for upper in lower..=4 {
+                    oracle.filter_cardinality(lower, upper).assert_matches(
+                        &space,
+                        &family.cardinality().between(lower..=upper).unwrap(),
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn filter_boundaries_and_invalid_inputs_are_explicit() {
+        let space = small_space(2);
+        let a = space.variable(0).unwrap();
+        let family = space.powerset().unwrap();
+
+        assert!(family.cardinality().exactly(3).unwrap().is_empty());
+        assert!(
+            family
+                .cardinality()
+                .at_least(0)
+                .unwrap()
+                .equivalent(&family)
+                .unwrap()
+        );
+        assert!(
+            family
+                .cardinality()
+                .at_most(usize::MAX)
+                .unwrap()
+                .equivalent(&family)
+                .unwrap()
+        );
+        assert!(
+            family
+                .cardinality()
+                .at_least(usize::MAX)
+                .unwrap()
+                .is_empty()
+        );
+        let reversed_start = 2;
+        let reversed_end = 1;
+        assert!(matches!(
+            family.cardinality().between(reversed_start..=reversed_end),
+            Err(Error::InvalidRange { start: 2, end: 1 })
+        ));
+        assert!(
+            family
+                .filter_supersets_of(&[])
+                .unwrap()
+                .equivalent(&family)
+                .unwrap()
+        );
+        let only_empty = family.filter_subsets_of(&[]).unwrap();
+        assert!(only_empty.contains(&[]).unwrap());
+        assert!(!only_empty.contains(&[a]).unwrap());
+
+        let larger_space = small_space(3);
+        let out_of_range = larger_space.variable(2).unwrap();
+        assert!(matches!(
+            family.filter_contains(out_of_range),
+            Err(Error::InvalidElement { index: 2, .. })
+        ));
+        assert!(matches!(
+            family.filter_subsets_of(&[out_of_range]),
+            Err(Error::InvalidElement { index: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn filtering_composes_with_construction_intersection_and_queries() {
+        let space = small_space(4);
+        let variables = (0..4)
+            .map(|index| space.variable(index).unwrap())
+            .collect::<Vec<_>>();
+        let left = space.powerset().unwrap();
+        let right = space
+            .from_sets([
+                vec![variables[0], variables[1]],
+                vec![variables[0], variables[2], variables[3]],
+                vec![variables[1], variables[2]],
+            ])
+            .unwrap();
+
+        let result = left
+            .intersection(&right)
+            .unwrap()
+            .filter_contains(variables[0])
+            .unwrap()
+            .cardinality()
+            .exactly(2)
+            .unwrap();
+        assert!(result.contains(&[variables[0], variables[1]]).unwrap());
+        assert!(
+            !result
+                .contains(&[variables[0], variables[2], variables[3]])
+                .unwrap()
+        );
+        assert!(!result.contains(&[variables[1], variables[2]]).unwrap());
+    }
+
+    #[test]
+    fn filters_honor_operation_memo_limits_without_invalidating_inputs() {
+        let space = FamilySpace::builder(2)
+            .limits(Limits {
+                max_live_nodes: 64,
+                max_operation_memo_entries: 0,
+                shared_cache_entries: 0,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+        let family = space.powerset().unwrap();
+        let a = space.variable(0).unwrap();
+
+        assert!(matches!(
+            family.filter_contains(a),
+            Err(Error::LimitExceeded {
+                kind: LimitKind::OperationMemo,
+                limit: 0,
+                attempted: 1,
+                ..
+            })
+        ));
+        assert!(family.contains(&[]).unwrap());
+        assert!(family.contains(&[a]).unwrap());
+    }
+
+    #[test]
+    fn filtering_a_deep_zdd_does_not_use_the_call_stack() {
+        const VARIABLE_COUNT: usize = 2_000;
+        let space = FamilySpace::builder(VARIABLE_COUNT)
+            .limits(Limits {
+                max_live_nodes: 40_000,
+                max_operation_memo_entries: 20_000,
+                shared_cache_entries: 0,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+        let variables = (0..VARIABLE_COUNT)
+            .map(|index| space.variable(index).unwrap())
+            .collect::<Vec<_>>();
+        let family = space.from_sets([variables.clone()]).unwrap();
+
+        let result = family
+            .filter_contains(variables[VARIABLE_COUNT - 1])
+            .unwrap()
+            .cardinality()
+            .exactly(VARIABLE_COUNT)
+            .unwrap();
+        assert!(result.contains(&variables).unwrap());
     }
 
     #[test]
