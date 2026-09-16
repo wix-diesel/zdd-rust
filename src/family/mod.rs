@@ -21,10 +21,17 @@ impl VariableId {
 /// Space-wide resource limits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Limits {
+    /// Maximum number of live nonterminal nodes in the shared manager.
     pub max_live_nodes: usize,
+    /// Maximum distinct memo entries retained by one symbolic operation.
     pub max_operation_memo_entries: usize,
+    /// Maximum distinct canonical states retained in one frontier layer.
     pub max_frontier_states: usize,
+    /// Maximum include/exclude transitions attempted by one frontier build.
     pub max_frontier_transitions: usize,
+    /// Maximum entries in the adapter-owned shared computed cache.
+    ///
+    /// A value of zero disables the cache.
     pub shared_cache_entries: usize,
 }
 
@@ -44,22 +51,68 @@ impl Default for Limits {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LimitKind {
+    /// Live nonterminal nodes in the shared manager.
     Node,
+}
+
+/// Statistics collected for one set-family operation.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OperationStats {
+    /// Live manager nodes immediately before the operation.
+    pub nodes_before: usize,
+    /// Live manager nodes immediately after success or failure.
+    pub nodes_after: usize,
+    /// New canonical nodes created by this operation, including nodes later collected.
+    pub nodes_created: usize,
+    /// Peak number of entries in the operation-local memo table.
+    pub peak_operation_memo_entries: usize,
+    /// Number of operation-local memo hits.
+    pub operation_memo_hits: usize,
+    /// Number of shared computed-cache hits.
+    pub shared_cache_hits: usize,
+    /// Number of shared computed-cache misses.
+    pub shared_cache_misses: usize,
+    /// Number of cooperative cancellation checks.
+    pub cancellation_checks: usize,
+}
+
+impl OperationStats {
+    fn node_construction(nodes_before: usize, nodes_after: usize, nodes_created: usize) -> Self {
+        Self {
+            nodes_before,
+            nodes_after,
+            nodes_created,
+            ..Self::default()
+        }
+    }
 }
 
 /// Error returned by set-family construction.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
+    /// An element index is outside the fixed universe.
+    #[non_exhaustive]
     InvalidElement {
+        /// The rejected element index.
         index: usize,
+        /// The number of variables in the destination universe.
         variable_count: usize,
     },
+    /// A configured resource limit was exceeded.
+    #[non_exhaustive]
     LimitExceeded {
+        /// The resource that could not be added.
         kind: LimitKind,
+        /// The configured maximum value.
         limit: usize,
+        /// The value that the operation attempted to reach.
         attempted: usize,
+        /// Work completed before the limit was encountered.
+        stats: OperationStats,
     },
+    /// A public capacity cannot be represented by the selected backend.
     CapacityOverflow,
 }
 
@@ -77,6 +130,7 @@ impl fmt::Display for Error {
                 kind,
                 limit,
                 attempted,
+                ..
             } => write!(
                 formatter,
                 "{kind:?} limit {limit} exceeded while attempting to use {attempted} entries"
@@ -189,15 +243,23 @@ impl FamilySpace {
         normalized.sort_unstable();
         normalized.dedup();
 
-        let root = self
-            .inner
-            .manager
-            .build_from_sets(&normalized)
-            .map_err(|_| Error::LimitExceeded {
-                kind: LimitKind::Node,
-                limit: self.inner.limits.max_live_nodes,
-                attempted: self.inner.limits.max_live_nodes.saturating_add(1),
-            })?;
+        let nodes_before = self.inner.manager.inner_node_count();
+        let root = match self.inner.manager.build_from_sets(&normalized) {
+            Ok((root, _)) => root,
+            Err(error) => {
+                let nodes_after = self.inner.manager.inner_node_count();
+                return Err(Error::LimitExceeded {
+                    kind: LimitKind::Node,
+                    limit: self.inner.limits.max_live_nodes,
+                    attempted: self.inner.limits.max_live_nodes.saturating_add(1),
+                    stats: OperationStats::node_construction(
+                        nodes_before,
+                        nodes_after,
+                        error.nodes_created,
+                    ),
+                });
+            }
+        };
         Ok(self.family(root))
     }
 
@@ -231,19 +293,17 @@ impl FamilySpaceBuilder {
                 kind: LimitKind::Node,
                 limit: self.limits.max_live_nodes,
                 attempted: initial_nodes,
+                stats: OperationStats::default(),
             });
         }
 
-        let manager = ZddManager::new(
-            self.variable_count,
-            self.limits.max_live_nodes,
-            self.limits.shared_cache_entries,
-        )
-        .map_err(|error| match error {
-            CreateError::TooManyVariables
-            | CreateError::NodeCapacityTooLarge
-            | CreateError::CacheCapacityTooLarge => Error::CapacityOverflow,
-        })?;
+        let manager = ZddManager::new(self.variable_count, self.limits.max_live_nodes).map_err(
+            |error| match error {
+                CreateError::TooManyVariables | CreateError::NodeCapacityTooLarge => {
+                    Error::CapacityOverflow
+                }
+            },
+        )?;
 
         Ok(FamilySpace {
             inner: Arc::new(SpaceInner {
@@ -350,6 +410,7 @@ mod tests {
                 kind: LimitKind::Node,
                 limit: 5,
                 attempted: 6,
+                ..
             })
         ));
     }
@@ -367,15 +428,67 @@ mod tests {
         let stable = space.unit();
         let variable = space.variable(0).unwrap();
 
+        let error = match space.from_sets([vec![], vec![variable]]) {
+            Err(error) => error,
+            Ok(_) => panic!("the manager has no capacity for another node"),
+        };
         assert!(matches!(
-            space.from_sets([vec![], vec![variable]]),
-            Err(Error::LimitExceeded {
+            &error,
+            Error::LimitExceeded {
                 kind: LimitKind::Node,
                 limit: 4,
                 attempted: 5,
-            })
+                ..
+            }
         ));
+        let Error::LimitExceeded { stats, .. } = error else {
+            unreachable!();
+        };
+        assert_eq!(stats.nodes_before, 4);
+        assert_eq!(stats.nodes_after, 4);
+        assert_eq!(stats.nodes_created, 0);
         assert!(!stable.is_empty());
+    }
+
+    #[test]
+    fn failed_construction_reports_nodes_created_before_the_limit() {
+        let space = FamilySpace::builder(2)
+            .limits(Limits {
+                max_live_nodes: 5,
+                shared_cache_entries: 0,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+        let a = space.variable(0).unwrap();
+        let b = space.variable(1).unwrap();
+
+        let error = match space.from_sets([vec![], vec![a], vec![b]]) {
+            Err(error) => error,
+            Ok(_) => panic!("the result needs two nodes but only one slot is free"),
+        };
+        let Error::LimitExceeded { stats, .. } = error else {
+            panic!("expected a node limit error");
+        };
+        assert_eq!(stats.nodes_before, 4);
+        assert_eq!(stats.nodes_after, 5);
+        assert_eq!(stats.nodes_created, 1);
+    }
+
+    #[test]
+    fn cache_limit_accepts_zero_and_non_power_of_two_values() {
+        for shared_cache_entries in [0, 3] {
+            let space = FamilySpace::builder(2)
+                .limits(Limits {
+                    max_live_nodes: 16,
+                    shared_cache_entries,
+                    ..Limits::default()
+                })
+                .build()
+                .unwrap();
+            let variable = space.variable(0).unwrap();
+            assert!(!space.from_sets([vec![variable]]).unwrap().is_empty());
+        }
     }
 
     #[test]
@@ -402,5 +515,25 @@ mod tests {
         let family = space.powerset().unwrap();
         drop(space);
         drop(family);
+    }
+
+    #[test]
+    fn constructing_deep_sets_does_not_recurse_through_the_zdd() {
+        const VARIABLE_COUNT: usize = 10_000;
+        let space = FamilySpace::builder(VARIABLE_COUNT)
+            .limits(Limits {
+                max_live_nodes: 35_000,
+                shared_cache_entries: 0,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+        let long: Vec<_> = (0..VARIABLE_COUNT)
+            .map(|index| space.variable(index).unwrap())
+            .collect();
+        let prefix = long[..VARIABLE_COUNT - 1].to_vec();
+
+        let family = space.from_sets([long, prefix]).unwrap();
+        assert!(!family.is_empty());
     }
 }

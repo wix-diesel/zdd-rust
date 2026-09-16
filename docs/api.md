@@ -212,6 +212,8 @@ GraphSpaceでのcompactionはGraphと辺対応も保持した結果を返す。�
 
 `FamilySpace::new`は`Limits::default()`を使い、builderで`Limits`全体を差し替える。space作成後に上限は変更しない。FrontierBuilderはspaceの上限以下となる一操作用の値を指定できる。query用snapshotを作るAPIは`QueryLimits`を明示的に受ける。すべての数は`usize`で、backend型やbyte幅を公開しない。
 
+v1の対応targetは64-bit環境とする。backendがnode capacityを独自に縮小する32-bit環境は、公開limitとの不一致を避けるためcompile時に拒否する。
+
 ### 9.1 既定値
 
 | field | default | 計数対象と超過判定 |

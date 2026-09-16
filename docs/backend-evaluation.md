@@ -24,7 +24,7 @@ cache・並行managerがすでにあり、今回の同一workloadでも専用cor
 
 | 対象 | 固定version / commit | 構成 |
 |---|---|---|
-| OxiDD | crate version 0.12.0、[`be2f69bd704a4b9baf993fe54ff92c7ca17bb177`](https://github.com/OxiDD/oxidd/commit/be2f69bd704a4b9baf993fe54ff92c7ca17bb177) | `default-features = false`、`manager-index`、`zbdd`、`apply-cache-direct-mapped`、1 worker、並列applyなし |
+| OxiDD | crate version 0.12.0、[`be2f69bd704a4b9baf993fe54ff92c7ca17bb177`](https://github.com/OxiDD/oxidd/commit/be2f69bd704a4b9baf993fe54ff92c7ca17bb177) | 評価時は`default-features = false`、`manager-index`、`zbdd`、`apply-cache-direct-mapped`、1 worker、並列applyなし。製品crateでは容量契約のためbackend cacheを無効化 |
 | 専用core baseline | [`3b00911ab01c99866e24c3ba9fa34aecc0e9f214`](https://github.com/wix-diesel/zdd-rust/commit/3b00911ab01c99866e24c3ba9fa34aecc0e9f214) の [`custom.rs`](../tools/backend-evaluation/src/custom.rs) | `Vec` arena、`HashMap` unique table、操作単位memo、online GC・共有同期なし |
 
 OxiDDは0.12.0 release tag後の確認済みcommitを使用した。Cargo.lockにもgit revisionを固定して
@@ -104,7 +104,9 @@ OxiDDの`PartialEq`を別spaceの意味比較へ露出することは禁止す�
 ## 6. GC・cache・依存・ライセンス
 
 OxiDD index managerはFunctionによる外部参照countと内部edgeを区別し、到達不能nodeをGCする。
-apply cacheはmanager eventの`pre_gc` / `post_gc`で無効化・再有効化される。adapterはrootを
+評価したapply cacheはmanager eventの`pre_gc` / `post_gc`で無効化・再有効化される。ただし、
+direct-mapped実装は指定容量を2の累乗へ切り上げ、0を無効値として扱わないため製品crateでは
+使用しない。厳密な`shared_cache_entries`上限はadapter所有cacheで実装する。adapterはrootを
 `ZBDDFunction`として保持し、node traversalはmanager closure内だけで行う。iteratorと
 CountIndexはlocal snapshotを所有し、callback/RNG実行中にmanager lockを保持しない。
 

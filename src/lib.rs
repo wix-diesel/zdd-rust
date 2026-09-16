@@ -5,11 +5,14 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(not(target_pointer_width = "64"))]
+compile_error!("zdd-family currently supports only 64-bit targets");
+
 mod family;
 mod zdd;
 
 pub use family::{
-    Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, SetFamily, VariableId,
+    Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationStats, SetFamily, VariableId,
 };
 
 #[cfg(feature = "graph")]

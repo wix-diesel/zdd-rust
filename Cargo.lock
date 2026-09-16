@@ -157,7 +157,6 @@ dependencies = [
  "cfg-if",
  "derive-where",
  "document-features",
- "oxidd-cache",
  "oxidd-core",
  "oxidd-derive",
  "oxidd-dump",
@@ -165,18 +164,6 @@ dependencies = [
  "oxidd-reorder",
  "oxidd-rules-zbdd",
  "rustc-hash",
-]
-
-[[package]]
-name = "oxidd-cache"
-version = "0.12.0"
-source = "git+https://github.com/OxiDD/oxidd.git?rev=be2f69bd704a4b9baf993fe54ff92c7ca17bb177#be2f69bd704a4b9baf993fe54ff92c7ca17bb177"
-dependencies = [
- "allocator-api2",
- "document-features",
- "hugealloc",
- "oxidd-core",
- "parking_lot",
 ]
 
 [[package]]
