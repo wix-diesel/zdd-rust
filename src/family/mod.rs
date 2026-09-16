@@ -453,9 +453,9 @@ mod tests {
 
     #[test]
     fn failed_construction_reports_nodes_created_before_the_limit() {
-        let space = FamilySpace::builder(2)
+        let space = FamilySpace::builder(3)
             .limits(Limits {
-                max_live_nodes: 5,
+                max_live_nodes: 7,
                 shared_cache_entries: 0,
                 ..Limits::default()
             })
@@ -463,16 +463,17 @@ mod tests {
             .unwrap();
         let a = space.variable(0).unwrap();
         let b = space.variable(1).unwrap();
+        let c = space.variable(2).unwrap();
 
-        let error = match space.from_sets([vec![], vec![a], vec![b]]) {
+        let error = match space.from_sets([vec![], vec![a], vec![b], vec![c]]) {
             Err(error) => error,
             Ok(_) => panic!("the result needs two nodes but only one slot is free"),
         };
         let Error::LimitExceeded { stats, .. } = error else {
             panic!("expected a node limit error");
         };
-        assert_eq!(stats.nodes_before, 4);
-        assert_eq!(stats.nodes_after, 5);
+        assert_eq!(stats.nodes_before, 6);
+        assert_eq!(stats.nodes_after, 7);
         assert_eq!(stats.nodes_created, 1);
     }
 
