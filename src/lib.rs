@@ -11,6 +11,9 @@ compile_error!("zdd-family currently supports only 64-bit targets");
 mod family;
 mod zdd;
 
+#[cfg(test)]
+mod test_support;
+
 pub use family::{
     Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationReport, OperationStats,
     SetFamily, SpaceStats, VariableId,

@@ -67,6 +67,16 @@ unit testで少なくとも次を確認する。
 
 3変数では全256集合族の全ペアを比較できる。4変数では全65,536集合族について構築・count・列挙等の単項検証を行い、二項演算はproperty-basedの組合せも利用する。全4変数Familyペアを通常CIで総当たりする計画にはしない。
 
+### CI実行区分
+
+| 区分 | 現在の実行内容 |
+|---|---|
+| 通常CI | 3変数の全256集合族について全65,536ペアの4演算・subsetを独立oracleと比較。4変数の全65,536集合族について構築、入力正規化、membership、empty/equalityを単項全探索。集合演算のproperty testは64ケース。10,000変数の構築・演算・dropで反復実装を確認 |
+| 定期CI | 通常CIを全feature構成で再実行し、`ZDD_PROPTEST_CASES=4096`でproperty testの探索量を増やす |
+| 対象外 | 4変数集合族の全ペア（4,294,967,296ペア）は通常・定期CIとも実行せず、4変数property testで置き換える。より深い列とbackend上限直前の長時間試験は専用stress環境へ分離する |
+
+`src/test_support.rs`のoracleは集合族を明示bitset集合として保持し、ZDDのnode生成・cofactor・apply実装を利用しない。DAG fixtureはbackend NodeIdではなく、HI、LOの固定順で到達した局所IDを用いる正規化snapshotで比較する。
+
 深い変数列で、apply、列挙、count、compaction、dropがcall stackに依存しないことを確認する。RustのNode所有関係に再帰dropを持ち込まない。
 
 ## 4. Family property test
