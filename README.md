@@ -4,7 +4,9 @@
 
 Frontier-based Searchを、グラフの解集合を効率よく構築する中核機能として提供します。構築後は同じSet Family APIで条件を追加し、集合族を再利用できることを目指します。将来は加法重みによる最適化、rank/unrank、weighted samplingへ拡張します。
 
-**現在は`zdd-family` crateの骨格とCIを導入した段階です。製品APIはまだありません。** そのため、以下のコード例は設計案であり、インストール手順ではありません。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
+現在はグラフに依存しない`FamilySpace`と基本集合族コンストラクタを実装済みです。集合演算、query、Graph/Frontier APIはロードマップに沿って順次追加します。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
+
+対応targetは64-bit環境です。32-bit targetは現在サポートしていません。
 
 ## 設計方針
 
@@ -18,8 +20,24 @@ Frontier-based Searchを、グラフの解集合を効率よく構築する中�
 
 ## 想定する利用体験
 
+現在利用できる基本API:
+
+```rust
+use zdd_family::FamilySpace;
+
+let space = FamilySpace::new(3)?;
+let a = space.variable(0)?;
+let b = space.variable(1)?;
+let family = space.from_sets([vec![a], vec![a, b], vec![]])?;
+
+assert!(!family.is_empty());
+# Ok::<(), zdd_family::Error>(())
+```
+
+今後追加するGraph APIの利用イメージ:
+
 ```rust,ignore
-// 未実装のAPI案。source等はgraphから取得したID。
+// source等はgraphから取得したID。
 let space = GraphSpace::new(&graph)?;
 let paths = space.paths(source, target)?;
 

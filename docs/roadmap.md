@@ -136,7 +136,7 @@ featureの初期案はdefaultに`graph`（Graph APIとFrontier）、optionalに`
 | SemVer | 型・メソッドだけでなく演算意味と列挙順も対象。NodeId値・table走査順は対象外 |
 | 保存互換性 | 将来のformat versionをcrate versionから分離 |
 | fuzz/Miri | fuzzを定期実行。自前unsafeを導入する場合はMiri等も必須 |
-| 32-bit | checked変換とサイズ境界をcheck/test。主性能測定は64-bit |
+| 32-bit | v1では非対応。backendがnode capacityを縮小して公開limitと不一致になるためcompile時に拒否 |
 | ドキュメント言語 | 公開README/rustdocは英語を基本とする予定。現在の設計書は日本語 |
 
 backend評価用Cargo.tomlは製品crateではない。製品crate、CI、Rust examplesはP1以降に追加し、公開準備でREADMEの状態表示とAPI例を実装に合わせて更新する。

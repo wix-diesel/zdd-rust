@@ -11,13 +11,18 @@ Rust 1.98とする。MSRVを上げる場合は、依存関係を含む根拠を�
 
 `oxidd`は公開APIに現れないprivate dependencyとして、確認済みのOxiDD 0.12.0の
 commit `be2f69bd704a4b9baf993fe54ff92c7ca17bb177`へ固定する。使用featureは
-`manager-index`、`zbdd`、`apply-cache-direct-mapped`のみであり、default featureや
-BDD/MTBDD、並列apply、DDDMP、Graphviz機能を有効にしない。
+`manager-index`と`zbdd`のみであり、default feature、backend apply cache、BDD/MTBDD、
+並列apply、DDDMP、Graphviz機能を有効にしない。OxiDDのdirect-mapped cacheは容量を
+2の累乗へ切り上げ、0でも1 entryを確保するため、公開`shared_cache_entries`契約を満たす
+共有cacheはadapter側で管理する。
 
 この選択は[backend適合性評価](backend-evaluation.md)の同一workload比較、正規化・
-root管理・cacheを再利用できること、およびRust 1.98というMSRVを根拠とする。公開前には
+root管理・GCを再利用できること、およびRust 1.98というMSRVを根拠とする。公開前には
 crateの公開版とlockfileを再確認する。OxiDDのMSRV、依存ライセンス、またはbounded
 operationの実装可能性が公開条件と衝突した場合は、同評価に定めた再評価gateに従う。
+
+製品crateは64-bit targetのみをサポートする。OxiDD index managerが32-bit環境でnode capacityを
+独自に縮小するため、公開`max_live_nodes`との不一致を避ける目的で32-bit buildは明示的に拒否する。
 
 ## ライセンスと安全性
 
