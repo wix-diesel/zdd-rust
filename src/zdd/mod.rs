@@ -422,7 +422,7 @@ impl ZddManager {
 
     /// Filters a ZDD using an operation-local, iterative DAG dynamic program.
     ///
-    /// The `position` field in a key is used only by `Supersets`; `lower` and
+    /// The `position` field in a key is used by `Contains` and `Supersets`; `lower` and
     /// `upper` are used only by `Cardinality`. Keeping one engine makes the
     /// resource accounting and deep-DAG behavior identical for all filters.
     #[allow(clippy::mutable_key_type)]
