@@ -36,10 +36,7 @@ pub(crate) struct ZddManager {
 pub(crate) struct Root(ZBDDFunction);
 
 impl ZddManager {
-    pub(crate) fn new(
-        variable_count: usize,
-        node_capacity: usize,
-    ) -> Result<Self, CreateError> {
+    pub(crate) fn new(variable_count: usize, node_capacity: usize) -> Result<Self, CreateError> {
         let variable_count_u32 =
             u32::try_from(variable_count).map_err(|_| CreateError::TooManyVariables)?;
         if node_capacity > MAX_INNER_NODES {
@@ -84,10 +81,7 @@ impl ZddManager {
         Root(self.powerset.clone())
     }
 
-    pub(crate) fn build_from_sets(
-        &self,
-        sets: &[Vec<u32>],
-    ) -> Result<(Root, usize), BuildError> {
+    pub(crate) fn build_from_sets(&self, sets: &[Vec<u32>]) -> Result<(Root, usize), BuildError> {
         let mut trie = vec![TrieNode::default()];
         for set in sets {
             let mut node_index = 0;
@@ -112,8 +106,7 @@ impl ZddManager {
         }
 
         self.manager.with_manager_shared(|backend| {
-            let mut roots: Vec<Option<ZBDDFunction>> =
-                (0..trie.len()).map(|_| None).collect();
+            let mut roots: Vec<Option<ZBDDFunction>> = (0..trie.len()).map(|_| None).collect();
             let mut nodes_created = 0;
 
             // Children are appended after their parents, so reverse index order
@@ -132,10 +125,12 @@ impl ZddManager {
                 for &(variable, child_index) in node.children.iter().rev() {
                     let nodes_before = backend.num_inner_nodes();
                     let gc_before = backend.gc_count();
-                    let hi = roots[child_index]
-                        .as_ref()
-                        .expect("trie children are built before their parents")
-                        .as_edge(backend);
+                    let hi = backend.clone_edge(
+                        roots[child_index]
+                            .as_ref()
+                            .expect("trie children are built before their parents")
+                            .as_edge(backend),
+                    );
                     edge = match oxidd::zbdd::make_node(
                         backend,
                         self.variables[variable as usize].as_edge(backend),
@@ -145,9 +140,7 @@ impl ZddManager {
                         Ok(edge) => edge,
                         Err(_) => return Err(BuildError { nodes_created }),
                     };
-                    if backend.gc_count() != gc_before
-                        || backend.num_inner_nodes() > nodes_before
-                    {
+                    if backend.gc_count() != gc_before || backend.num_inner_nodes() > nodes_before {
                         nodes_created += 1;
                     }
                 }
@@ -243,7 +236,9 @@ mod tests {
         let root = manager.build_from_sets(&expected).unwrap().0;
 
         for bits in 0u32..8 {
-            let candidate: Vec<u32> = (0..3).filter(|variable| bits & (1 << variable) != 0).collect();
+            let candidate: Vec<u32> = (0..3)
+                .filter(|variable| bits & (1 << variable) != 0)
+                .collect();
             assert_eq!(
                 manager.contains(&root, &candidate),
                 expected.contains(&candidate),

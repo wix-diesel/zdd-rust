@@ -12,7 +12,8 @@ mod family;
 mod zdd;
 
 pub use family::{
-    Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationStats, SetFamily, VariableId,
+    Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationStats, SetFamily,
+    VariableId,
 };
 
 #[cfg(feature = "graph")]

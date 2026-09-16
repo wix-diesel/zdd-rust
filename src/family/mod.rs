@@ -297,13 +297,14 @@ impl FamilySpaceBuilder {
             });
         }
 
-        let manager = ZddManager::new(self.variable_count, self.limits.max_live_nodes).map_err(
-            |error| match error {
-                CreateError::TooManyVariables | CreateError::NodeCapacityTooLarge => {
-                    Error::CapacityOverflow
+        let manager =
+            ZddManager::new(self.variable_count, self.limits.max_live_nodes).map_err(|error| {
+                match error {
+                    CreateError::TooManyVariables | CreateError::NodeCapacityTooLarge => {
+                        Error::CapacityOverflow
+                    }
                 }
-            },
-        )?;
+            })?;
 
         Ok(FamilySpace {
             inner: Arc::new(SpaceInner {
