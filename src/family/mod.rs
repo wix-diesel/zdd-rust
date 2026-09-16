@@ -4,7 +4,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::zdd::{CreateError, Root, ZddManager};
+use crate::zdd::{ApplyError, ApplyOp, ApplyStats, CreateError, Root, ZddManager};
 
 /// An element identifier in a [`FamilySpace`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,6 +53,8 @@ impl Default for Limits {
 pub enum LimitKind {
     /// Live nonterminal nodes in the shared manager.
     Node,
+    /// Distinct keys retained by one operation-local memo table.
+    OperationMemo,
 }
 
 /// Statistics collected for one set-family operation.
@@ -75,6 +77,38 @@ pub struct OperationStats {
     pub shared_cache_misses: usize,
     /// Number of cooperative cancellation checks.
     pub cancellation_checks: usize,
+}
+
+/// A successful operation value together with its diagnostic statistics.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OperationReport<T> {
+    /// The operation result.
+    pub value: T,
+    /// Work performed by the operation.
+    pub stats: OperationStats,
+}
+
+/// A snapshot of manager-wide resource and cache statistics.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SpaceStats {
+    /// Current live nonterminal node count.
+    pub live_nodes: usize,
+    /// Highest observed live nonterminal node count.
+    pub peak_live_nodes: usize,
+    /// Cumulative canonical nodes created, including nodes later collected.
+    pub nodes_created: usize,
+    /// Current shared computed-cache entry count.
+    pub shared_cache_entries: usize,
+    /// Cumulative shared computed-cache hits.
+    pub shared_cache_hits: usize,
+    /// Cumulative shared computed-cache misses.
+    pub shared_cache_misses: usize,
+    /// Cumulative shared computed-cache evictions.
+    pub shared_cache_evictions: usize,
+    /// Number of backend garbage collections.
+    pub garbage_collections: u64,
 }
 
 impl OperationStats {
@@ -100,6 +134,9 @@ pub enum Error {
         /// The number of variables in the destination universe.
         variable_count: usize,
     },
+    /// Two families belong to different spaces.
+    #[non_exhaustive]
+    ContextMismatch {},
     /// A configured resource limit was exceeded.
     #[non_exhaustive]
     LimitExceeded {
@@ -138,6 +175,7 @@ impl fmt::Display for Error {
             Self::CapacityOverflow => {
                 write!(formatter, "capacity cannot be represented by the backend")
             }
+            Self::ContextMismatch {} => write!(formatter, "families belong to different spaces"),
         }
     }
 }
@@ -211,6 +249,22 @@ impl FamilySpace {
     /// Returns the family containing every subset of this universe.
     pub fn powerset(&self) -> Result<SetFamily, Error> {
         Ok(self.family(self.inner.manager.powerset()))
+    }
+
+    /// Returns a snapshot of manager-wide statistics.
+    #[must_use]
+    pub fn stats(&self) -> SpaceStats {
+        let manager = self.inner.manager.stats();
+        SpaceStats {
+            live_nodes: self.inner.manager.inner_node_count(),
+            peak_live_nodes: manager.peak_live_nodes,
+            nodes_created: manager.nodes_created,
+            shared_cache_entries: manager.shared_cache_entries,
+            shared_cache_hits: manager.shared_cache_hits,
+            shared_cache_misses: manager.shared_cache_misses,
+            shared_cache_evictions: manager.shared_cache_evictions,
+            garbage_collections: manager.gc_count,
+        }
     }
 
     /// Builds a family from explicit sets.
@@ -297,14 +351,16 @@ impl FamilySpaceBuilder {
             });
         }
 
-        let manager =
-            ZddManager::new(self.variable_count, self.limits.max_live_nodes).map_err(|error| {
-                match error {
-                    CreateError::TooManyVariables | CreateError::NodeCapacityTooLarge => {
-                        Error::CapacityOverflow
-                    }
-                }
-            })?;
+        let manager = ZddManager::new(
+            self.variable_count,
+            self.limits.max_live_nodes,
+            self.limits.shared_cache_entries,
+        )
+        .map_err(|error| match error {
+            CreateError::TooManyVariables | CreateError::NodeCapacityTooLarge => {
+                Error::CapacityOverflow
+            }
+        })?;
 
         Ok(FamilySpace {
             inner: Arc::new(SpaceInner {
@@ -317,12 +373,150 @@ impl FamilySpaceBuilder {
 }
 
 impl SetFamily {
+    /// Returns the union of two families in the same space.
+    pub fn union(&self, other: &Self) -> Result<Self, Error> {
+        Ok(self.union_with_stats(other)?.value)
+    }
+
+    /// Returns the union and diagnostic statistics.
+    pub fn union_with_stats(&self, other: &Self) -> Result<OperationReport<Self>, Error> {
+        self.binary_with_stats(other, ApplyOp::Union)
+    }
+
+    /// Returns the intersection of two families in the same space.
+    pub fn intersection(&self, other: &Self) -> Result<Self, Error> {
+        Ok(self.intersection_with_stats(other)?.value)
+    }
+
+    /// Returns the intersection and diagnostic statistics.
+    pub fn intersection_with_stats(&self, other: &Self) -> Result<OperationReport<Self>, Error> {
+        self.binary_with_stats(other, ApplyOp::Intersection)
+    }
+
+    /// Returns the sets in this family that are absent from `other`.
+    pub fn difference(&self, other: &Self) -> Result<Self, Error> {
+        Ok(self.difference_with_stats(other)?.value)
+    }
+
+    /// Returns the difference and diagnostic statistics.
+    pub fn difference_with_stats(&self, other: &Self) -> Result<OperationReport<Self>, Error> {
+        self.binary_with_stats(other, ApplyOp::Difference)
+    }
+
+    /// Returns sets that occur in exactly one of the two families.
+    pub fn symmetric_difference(&self, other: &Self) -> Result<Self, Error> {
+        Ok(self.symmetric_difference_with_stats(other)?.value)
+    }
+
+    /// Returns the symmetric difference and diagnostic statistics.
+    pub fn symmetric_difference_with_stats(
+        &self,
+        other: &Self,
+    ) -> Result<OperationReport<Self>, Error> {
+        self.binary_with_stats(other, ApplyOp::SymmetricDifference)
+    }
+
+    /// Returns whether `set` is a member of this family.
+    ///
+    /// Element order and duplicate elements are normalized.
+    pub fn contains(&self, set: &[VariableId]) -> Result<bool, Error> {
+        let mut normalized = Vec::with_capacity(set.len());
+        for element in set {
+            if element.index() >= self.space.variable_count {
+                return Err(Error::InvalidElement {
+                    index: element.index(),
+                    variable_count: self.space.variable_count,
+                });
+            }
+            normalized.push(element.0);
+        }
+        normalized.sort_unstable();
+        normalized.dedup();
+        Ok(self.space.manager.contains(&self.root, &normalized))
+    }
+
     /// Returns whether this family contains no sets.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.space
             .manager
             .roots_equal(&self.root, &self.space.manager.empty())
+    }
+
+    /// Returns whether two families in the same space are equivalent.
+    pub fn equivalent(&self, other: &Self) -> Result<bool, Error> {
+        self.ensure_same_space(other)?;
+        Ok(self.space.manager.roots_equal(&self.root, &other.root))
+    }
+
+    /// Returns whether every set in this family occurs in `other`.
+    pub fn is_subset_of(&self, other: &Self) -> Result<bool, Error> {
+        Ok(self.difference(other)?.is_empty())
+    }
+
+    fn binary_with_stats(&self, other: &Self, op: ApplyOp) -> Result<OperationReport<Self>, Error> {
+        self.ensure_same_space(other)?;
+        let nodes_before = self.space.manager.inner_node_count();
+        match self.space.manager.apply(
+            op,
+            &self.root,
+            &other.root,
+            self.space.limits.max_operation_memo_entries,
+        ) {
+            Ok((root, internal)) => {
+                let nodes_after = self.space.manager.inner_node_count();
+                Ok(OperationReport {
+                    value: Self {
+                        space: Arc::clone(&self.space),
+                        root,
+                    },
+                    stats: Self::operation_stats(nodes_before, nodes_after, internal),
+                })
+            }
+            Err(ApplyError::MemoLimit { attempted, stats }) => {
+                let nodes_after = self.space.manager.inner_node_count();
+                Err(Error::LimitExceeded {
+                    kind: LimitKind::OperationMemo,
+                    limit: self.space.limits.max_operation_memo_entries,
+                    attempted,
+                    stats: Self::operation_stats(nodes_before, nodes_after, stats),
+                })
+            }
+            Err(ApplyError::NodeLimit { stats }) => {
+                let nodes_after = self.space.manager.inner_node_count();
+                Err(Error::LimitExceeded {
+                    kind: LimitKind::Node,
+                    limit: self.space.limits.max_live_nodes,
+                    attempted: self.space.limits.max_live_nodes.saturating_add(1),
+                    stats: Self::operation_stats(nodes_before, nodes_after, stats),
+                })
+            }
+        }
+    }
+
+    fn operation_stats(
+        nodes_before: usize,
+        nodes_after: usize,
+        internal: ApplyStats,
+    ) -> OperationStats {
+        OperationStats {
+            nodes_before,
+            nodes_after,
+            nodes_created: internal.nodes_created,
+            peak_operation_memo_entries: internal.peak_memo_entries,
+            operation_memo_hits: internal.memo_hits,
+            shared_cache_hits: internal.shared_cache_hits,
+            shared_cache_misses: internal.shared_cache_misses,
+            cancellation_checks: 0,
+        }
+    }
+
+    fn ensure_same_space(&self, other: &Self) -> Result<(), Error> {
+        if Arc::ptr_eq(&self.space, &other.space) {
+            Ok(())
+        } else {
+            Err(Error::ContextMismatch {})
+        }
     }
 }
 
@@ -537,5 +731,199 @@ mod tests {
 
         let family = space.from_sets([long, prefix]).unwrap();
         assert!(!family.is_empty());
+        let result = family.intersection(&space.powerset().unwrap()).unwrap();
+        assert!(result.equivalent(&family).unwrap());
+    }
+
+    fn family_from_mask(space: &FamilySpace, mask: u16) -> SetFamily {
+        let sets = (0u8..8).filter(|set| mask & (1 << set) != 0).map(|set| {
+            (0..3)
+                .filter(|variable| set & (1 << variable) != 0)
+                .map(|variable| space.variable(variable).unwrap())
+                .collect::<Vec<_>>()
+        });
+        space.from_sets(sets).unwrap()
+    }
+
+    fn assert_membership_mask(space: &FamilySpace, family: &SetFamily, expected: u16) {
+        for set in 0u8..8 {
+            let mut elements = (0..3)
+                .filter(|variable| set & (1 << variable) != 0)
+                .map(|variable| space.variable(variable).unwrap())
+                .collect::<Vec<_>>();
+            elements.reverse();
+            assert_eq!(
+                family.contains(&elements).unwrap(),
+                expected & (1 << set) != 0,
+                "membership differed for set {set:03b} and family {expected:08b}"
+            );
+        }
+    }
+
+    #[test]
+    fn all_three_variable_families_match_the_explicit_oracle() {
+        let space = FamilySpace::builder(3)
+            .limits(Limits {
+                max_live_nodes: 8_192,
+                max_operation_memo_entries: 1_024,
+                shared_cache_entries: 17,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+        let families = (0u16..=255)
+            .map(|mask| family_from_mask(&space, mask))
+            .collect::<Vec<_>>();
+
+        for left in 0u16..=255 {
+            for right in 0u16..=255 {
+                let union = families[left as usize]
+                    .union(&families[right as usize])
+                    .unwrap();
+                let intersection = families[left as usize]
+                    .intersection(&families[right as usize])
+                    .unwrap();
+                let difference = families[left as usize]
+                    .difference(&families[right as usize])
+                    .unwrap();
+                let symmetric_difference = families[left as usize]
+                    .symmetric_difference(&families[right as usize])
+                    .unwrap();
+
+                assert!(
+                    union
+                        .equivalent(&families[(left | right) as usize])
+                        .unwrap()
+                );
+                assert!(
+                    intersection
+                        .equivalent(&families[(left & right) as usize])
+                        .unwrap()
+                );
+                assert!(
+                    difference
+                        .equivalent(&families[(left & !right & 0xff) as usize])
+                        .unwrap()
+                );
+                assert!(
+                    symmetric_difference
+                        .equivalent(&families[(left ^ right) as usize])
+                        .unwrap()
+                );
+                assert_eq!(
+                    families[left as usize]
+                        .is_subset_of(&families[right as usize])
+                        .unwrap(),
+                    left & !right == 0
+                );
+            }
+        }
+
+        for (mask, family) in families.iter().enumerate() {
+            assert_membership_mask(&space, family, mask as u16);
+            assert_eq!(family.is_empty(), mask == 0);
+        }
+    }
+
+    #[test]
+    fn cross_space_binary_operations_and_comparisons_are_rejected() {
+        let left = small_space(1).unit();
+        let right = small_space(1).unit();
+
+        assert!(matches!(
+            left.union(&right),
+            Err(Error::ContextMismatch { .. })
+        ));
+        assert!(matches!(
+            left.intersection(&right),
+            Err(Error::ContextMismatch { .. })
+        ));
+        assert!(matches!(
+            left.difference(&right),
+            Err(Error::ContextMismatch { .. })
+        ));
+        assert!(matches!(
+            left.symmetric_difference(&right),
+            Err(Error::ContextMismatch { .. })
+        ));
+        assert!(matches!(
+            left.equivalent(&right),
+            Err(Error::ContextMismatch { .. })
+        ));
+        assert!(matches!(
+            left.is_subset_of(&right),
+            Err(Error::ContextMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn contains_normalizes_order_and_duplicates() {
+        let space = small_space(3);
+        let a = space.variable(0).unwrap();
+        let c = space.variable(2).unwrap();
+        let family = space.from_sets([vec![a, c]]).unwrap();
+
+        assert!(family.contains(&[c, a, c]).unwrap());
+        assert!(!family.contains(&[a]).unwrap());
+    }
+
+    #[test]
+    fn operation_memo_limit_is_an_explicit_error() {
+        let space = FamilySpace::builder(2)
+            .limits(Limits {
+                max_live_nodes: 64,
+                max_operation_memo_entries: 0,
+                shared_cache_entries: 0,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+        let a = space.from_sets([vec![space.variable(0).unwrap()]]).unwrap();
+        let b = space.from_sets([vec![space.variable(1).unwrap()]]).unwrap();
+
+        assert!(matches!(
+            a.union(&b),
+            Err(Error::LimitExceeded {
+                kind: LimitKind::OperationMemo,
+                limit: 0,
+                attempted: 1,
+                ..
+            })
+        ));
+        assert!(a.contains(&[space.variable(0).unwrap()]).unwrap());
+        assert!(b.contains(&[space.variable(1).unwrap()]).unwrap());
+    }
+
+    #[test]
+    fn cache_eviction_and_cache_disable_do_not_change_results() {
+        for cache_capacity in [0, 1] {
+            let space = FamilySpace::builder(3)
+                .limits(Limits {
+                    max_live_nodes: 256,
+                    shared_cache_entries: cache_capacity,
+                    ..Limits::default()
+                })
+                .build()
+                .unwrap();
+            let left = family_from_mask(&space, 0b1010_1010);
+            let right = family_from_mask(&space, 0b1100_1100);
+
+            assert_membership_mask(&space, &left.union(&right).unwrap(), 0b1110_1110);
+            assert_membership_mask(&space, &left.intersection(&right).unwrap(), 0b1000_1000);
+            assert_membership_mask(&space, &left.difference(&right).unwrap(), 0b0010_0010);
+            assert_membership_mask(
+                &space,
+                &left.symmetric_difference(&right).unwrap(),
+                0b0110_0110,
+            );
+
+            let stats = space.stats();
+            assert!(stats.shared_cache_entries <= cache_capacity);
+            if cache_capacity == 0 {
+                assert_eq!(stats.shared_cache_evictions, 0);
+            } else {
+                assert!(stats.shared_cache_evictions > 0);
+            }
+        }
     }
 }
