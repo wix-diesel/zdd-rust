@@ -1,0 +1,29 @@
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = ["Apache-2.0", "MIT", "Unicode-3.0", "Zlib"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = [
+    { crate = "bindgen", reason = "C/C++ binding generation is outside the initial safe-Rust scope" },
+    { crate = "cc", reason = "C/C++ compilation is not a required dependency" },
+    { crate = "cmake", reason = "C/C++ compilation is not a required dependency" },
+    { crate = "pkg-config", reason = "C/C++ library discovery is not a required dependency" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+required-git-spec = "rev"
+allow-git = ["https://github.com/OxiDD/oxidd"]
+unused-allowed-source = "deny"

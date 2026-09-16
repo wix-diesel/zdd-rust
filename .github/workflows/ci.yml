@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format-and-lint:
+    name: Format and lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint all implemented feature combinations
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Verify no native FFI dependency is required
+        run: |
+          if cargo metadata --locked --format-version 1 | jq -e '
+            [.packages[] | select(
+              (.name | test("(-sys|-ffi)$"))
+              or (.name == "bindgen" or .name == "cc" or .name == "cmake" or .name == "pkg-config")
+            )] | length == 0
+          ' >/dev/null; then
+            exit 0
+          else
+            echo 'C/C++ FFI dependency detected.' >&2
+            exit 1
+          fi
+
+  test:
+    name: Test (${{ matrix.os }}, Rust ${{ matrix.toolchain }}, ${{ matrix.feature_set }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, toolchain: stable, feature_set: default, cargo_args: "" }
+          - { os: ubuntu-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: macos-latest, toolchain: stable, feature_set: default, cargo_args: "" }
+          - { os: macos-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: windows-latest, toolchain: stable, feature_set: default, cargo_args: "" }
+          - { os: windows-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: ubuntu-latest, toolchain: "1.98", feature_set: default, cargo_args: "" }
+          - { os: ubuntu-latest, toolchain: "1.98", feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: macos-latest, toolchain: "1.98", feature_set: default, cargo_args: "" }
+          - { os: macos-latest, toolchain: "1.98", feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: windows-latest, toolchain: "1.98", feature_set: default, cargo_args: "" }
+          - { os: windows-latest, toolchain: "1.98", feature_set: no-default-features, cargo_args: --no-default-features }
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Test
+        run: cargo test --locked ${{ matrix.cargo_args }}
+
+  documentation:
+    name: Build documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: stable
+
+      - name: Build default-feature documentation
+        run: cargo doc --locked --no-deps
+
+      - name: Build no-default-feature documentation
+        run: cargo doc --locked --no-deps --no-default-features
+
+  dependency-policy:
+    name: Check advisories and licenses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check advisories and licenses
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  backend-evaluation:
+    name: Build backend evaluation harness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: stable
+
+      - name: Build
+        run: cargo build --manifest-path tools/backend-evaluation/Cargo.toml --locked
