@@ -21,3 +21,6 @@ sampling = []
 # Keep the backend private so the public API can remain backend-independent.
 # See docs/dependencies.md for the version, MSRV, and license rationale.
 oxidd = { version = "0.12.0", git = "https://github.com/OxiDD/oxidd.git", rev = "be2f69bd704a4b9baf993fe54ff92c7ca17bb177", default-features = false, features = ["manager-index", "zbdd"] }
+
+[dev-dependencies]
+proptest = { version = "1.7", default-features = false, features = ["std"] }

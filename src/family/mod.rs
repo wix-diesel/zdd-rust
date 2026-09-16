@@ -523,6 +523,8 @@ impl SetFamily {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{OracleFamily, oracle_family_strategy};
+    use proptest::prelude::*;
 
     fn small_space(variable_count: usize) -> FamilySpace {
         FamilySpace::builder(variable_count)
@@ -533,6 +535,17 @@ mod tests {
             })
             .build()
             .unwrap()
+    }
+
+    fn property_test_config() -> ProptestConfig {
+        let cases = std::env::var("ZDD_PROPTEST_CASES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(64);
+        ProptestConfig {
+            cases,
+            ..ProptestConfig::default()
+        }
     }
 
     #[test]
@@ -735,31 +748,6 @@ mod tests {
         assert!(result.equivalent(&family).unwrap());
     }
 
-    fn family_from_mask(space: &FamilySpace, mask: u16) -> SetFamily {
-        let sets = (0u8..8).filter(|set| mask & (1 << set) != 0).map(|set| {
-            (0..3)
-                .filter(|variable| set & (1 << variable) != 0)
-                .map(|variable| space.variable(variable).unwrap())
-                .collect::<Vec<_>>()
-        });
-        space.from_sets(sets).unwrap()
-    }
-
-    fn assert_membership_mask(space: &FamilySpace, family: &SetFamily, expected: u16) {
-        for set in 0u8..8 {
-            let mut elements = (0..3)
-                .filter(|variable| set & (1 << variable) != 0)
-                .map(|variable| space.variable(variable).unwrap())
-                .collect::<Vec<_>>();
-            elements.reverse();
-            assert_eq!(
-                family.contains(&elements).unwrap(),
-                expected & (1 << set) != 0,
-                "membership differed for set {set:03b} and family {expected:08b}"
-            );
-        }
-    }
-
     #[test]
     fn all_three_variable_families_match_the_explicit_oracle() {
         let space = FamilySpace::builder(3)
@@ -771,57 +759,108 @@ mod tests {
             })
             .build()
             .unwrap();
-        let families = (0u16..=255)
-            .map(|mask| family_from_mask(&space, mask))
+        let oracles = (0u64..=255)
+            .map(|mask| OracleFamily::from_family_mask(3, mask))
+            .collect::<Vec<_>>();
+        let families = oracles
+            .iter()
+            .map(|oracle| oracle.build_in(&space))
             .collect::<Vec<_>>();
 
-        for left in 0u16..=255 {
-            for right in 0u16..=255 {
-                let union = families[left as usize]
-                    .union(&families[right as usize])
-                    .unwrap();
-                let intersection = families[left as usize]
-                    .intersection(&families[right as usize])
-                    .unwrap();
-                let difference = families[left as usize]
-                    .difference(&families[right as usize])
-                    .unwrap();
-                let symmetric_difference = families[left as usize]
-                    .symmetric_difference(&families[right as usize])
+        for left in 0usize..=255 {
+            for right in 0usize..=255 {
+                let union = families[left].union(&families[right]).unwrap();
+                let intersection = families[left].intersection(&families[right]).unwrap();
+                let difference = families[left].difference(&families[right]).unwrap();
+                let symmetric_difference = families[left]
+                    .symmetric_difference(&families[right])
                     .unwrap();
 
-                assert!(
-                    union
-                        .equivalent(&families[(left | right) as usize])
-                        .unwrap()
-                );
-                assert!(
-                    intersection
-                        .equivalent(&families[(left & right) as usize])
-                        .unwrap()
-                );
-                assert!(
-                    difference
-                        .equivalent(&families[(left & !right & 0xff) as usize])
-                        .unwrap()
-                );
-                assert!(
-                    symmetric_difference
-                        .equivalent(&families[(left ^ right) as usize])
-                        .unwrap()
-                );
+                oracles[left]
+                    .union(&oracles[right])
+                    .assert_matches(&space, &union);
+                oracles[left]
+                    .intersection(&oracles[right])
+                    .assert_matches(&space, &intersection);
+                oracles[left]
+                    .difference(&oracles[right])
+                    .assert_matches(&space, &difference);
+                oracles[left]
+                    .symmetric_difference(&oracles[right])
+                    .assert_matches(&space, &symmetric_difference);
                 assert_eq!(
-                    families[left as usize]
-                        .is_subset_of(&families[right as usize])
-                        .unwrap(),
-                    left & !right == 0
+                    families[left].is_subset_of(&families[right]).unwrap(),
+                    oracles[left].is_subset_of(&oracles[right])
                 );
             }
         }
 
-        for (mask, family) in families.iter().enumerate() {
-            assert_membership_mask(&space, family, mask as u16);
-            assert_eq!(family.is_empty(), mask == 0);
+        for (oracle, family) in oracles.iter().zip(&families) {
+            oracle.assert_matches(&space, family);
+        }
+    }
+
+    #[test]
+    fn all_four_variable_families_pass_unary_and_normalization_checks() {
+        let space = FamilySpace::builder(4)
+            .limits(Limits {
+                max_live_nodes: 16_384,
+                shared_cache_entries: 0,
+                ..Limits::default()
+            })
+            .build()
+            .unwrap();
+
+        for mask in 0u64..=u16::MAX as u64 {
+            let oracle = OracleFamily::from_family_mask(4, mask);
+            let family = oracle.build_in_with_normalization_noise(&space);
+            oracle.assert_matches(&space, &family);
+            assert!(family.equivalent(&oracle.build_in(&space)).unwrap());
+        }
+    }
+
+    proptest! {
+        #![proptest_config(property_test_config())]
+
+        #[test]
+        fn family_operations_obey_algebra_and_preserve_inputs(
+            left_oracle in oracle_family_strategy(4),
+            middle_oracle in oracle_family_strategy(4),
+            right_oracle in oracle_family_strategy(4),
+        ) {
+            let space = small_space(4);
+            let left = left_oracle.build_in_with_normalization_noise(&space);
+            let middle = middle_oracle.build_in(&space);
+            let right = right_oracle.build_in_with_normalization_noise(&space);
+
+            let union_lr = left.union(&right).unwrap();
+            let union_rl = right.union(&left).unwrap();
+            prop_assert!(union_lr.equivalent(&union_rl).unwrap());
+            prop_assert!(left.union(&left).unwrap().equivalent(&left).unwrap());
+            prop_assert!(left.union(&middle).unwrap().union(&right).unwrap()
+                .equivalent(&left.union(&middle.union(&right).unwrap()).unwrap()).unwrap());
+
+            let intersection_lr = left.intersection(&right).unwrap();
+            let intersection_rl = right.intersection(&left).unwrap();
+            prop_assert!(intersection_lr.equivalent(&intersection_rl).unwrap());
+            prop_assert!(left.intersection(&left).unwrap().equivalent(&left).unwrap());
+            prop_assert!(left.intersection(&middle).unwrap().intersection(&right).unwrap()
+                .equivalent(&left.intersection(&middle.intersection(&right).unwrap()).unwrap()).unwrap());
+
+            prop_assert!(left.difference(&left).unwrap().is_empty());
+            prop_assert!(left.symmetric_difference(&left).unwrap().is_empty());
+
+            left_oracle.union(&right_oracle).assert_matches(&space, &union_lr);
+            left_oracle.intersection(&right_oracle).assert_matches(&space, &intersection_lr);
+            left_oracle.difference(&right_oracle)
+                .assert_matches(&space, &left.difference(&right).unwrap());
+            left_oracle.symmetric_difference(&right_oracle)
+                .assert_matches(&space, &left.symmetric_difference(&right).unwrap());
+
+            // Every operation above must leave its immutable inputs unchanged.
+            left_oracle.assert_matches(&space, &left);
+            middle_oracle.assert_matches(&space, &middle);
+            right_oracle.assert_matches(&space, &right);
         }
     }
 
@@ -905,17 +944,23 @@ mod tests {
                 })
                 .build()
                 .unwrap();
-            let left = family_from_mask(&space, 0b1010_1010);
-            let right = family_from_mask(&space, 0b1100_1100);
+            let left_oracle = OracleFamily::from_family_mask(3, 0b1010_1010);
+            let right_oracle = OracleFamily::from_family_mask(3, 0b1100_1100);
+            let left = left_oracle.build_in(&space);
+            let right = right_oracle.build_in(&space);
 
-            assert_membership_mask(&space, &left.union(&right).unwrap(), 0b1110_1110);
-            assert_membership_mask(&space, &left.intersection(&right).unwrap(), 0b1000_1000);
-            assert_membership_mask(&space, &left.difference(&right).unwrap(), 0b0010_0010);
-            assert_membership_mask(
-                &space,
-                &left.symmetric_difference(&right).unwrap(),
-                0b0110_0110,
-            );
+            left_oracle
+                .union(&right_oracle)
+                .assert_matches(&space, &left.union(&right).unwrap());
+            left_oracle
+                .intersection(&right_oracle)
+                .assert_matches(&space, &left.intersection(&right).unwrap());
+            left_oracle
+                .difference(&right_oracle)
+                .assert_matches(&space, &left.difference(&right).unwrap());
+            left_oracle
+                .symmetric_difference(&right_oracle)
+                .assert_matches(&space, &left.symmetric_difference(&right).unwrap());
 
             let stats = space.stats();
             assert!(stats.shared_cache_entries <= cache_capacity);

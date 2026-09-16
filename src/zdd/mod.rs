@@ -571,6 +571,52 @@ impl ZddManager {
         let mut cache = SatCountCache::<u128, std::collections::hash_map::RandomState>::default();
         root.0.sat_count(self.variables.len() as u32, &mut cache)
     }
+
+    /// Serializes a reachable DAG using deterministic traversal-local IDs.
+    /// Backend node IDs and hash-table iteration order are never observed.
+    #[cfg(test)]
+    pub(crate) fn normalized_snapshot(&self, root: &Root) -> String {
+        fn reference(
+            manager: &ZddManager,
+            root: Root,
+            zero: &Root,
+            one: &Root,
+            nodes: &mut Vec<Root>,
+        ) -> String {
+            if manager.roots_equal(&root, zero) {
+                return "ZERO".to_owned();
+            }
+            if manager.roots_equal(&root, one) {
+                return "ONE".to_owned();
+            }
+            if let Some(index) = nodes
+                .iter()
+                .position(|known| manager.roots_equal(known, &root))
+            {
+                return format!("n{index}");
+            }
+            let index = nodes.len();
+            nodes.push(root);
+            format!("n{index}")
+        }
+
+        let zero = self.empty();
+        let one = self.unit();
+        let mut nodes = Vec::new();
+        let root_reference = reference(self, root.clone(), &zero, &one, &mut nodes);
+        let mut lines = vec![format!("root={root_reference}")];
+        let mut index = 0;
+        while index < nodes.len() {
+            let RootView::Node { variable, hi, lo } = self.view(&nodes[index]) else {
+                unreachable!("terminals are represented by names, not local node IDs");
+            };
+            let hi = reference(self, hi, &zero, &one, &mut nodes);
+            let lo = reference(self, lo, &zero, &one, &mut nodes);
+            lines.push(format!("n{index}: variable={variable}, hi={hi}, lo={lo}"));
+            index += 1;
+        }
+        lines.join("\n")
+    }
 }
 
 #[cfg(test)]
@@ -635,5 +681,34 @@ mod tests {
                 "membership differed for {candidate:?}"
             );
         }
+    }
+
+    #[test]
+    fn normalized_snapshot_is_independent_of_backend_node_allocation() {
+        let first = ZddManager::new(3, 64, 0).unwrap();
+        let first_root = first
+            .build_from_sets(&[vec![], vec![0], vec![0, 1], vec![2]])
+            .unwrap()
+            .0;
+
+        let second = ZddManager::new(3, 64, 0).unwrap();
+        let temporary = second
+            .build_from_sets(&[vec![0, 2], vec![1], vec![1, 2]])
+            .unwrap()
+            .0;
+        let second_root = second
+            .build_from_sets(&[vec![2], vec![0, 1], vec![], vec![0]])
+            .unwrap()
+            .0;
+        drop(temporary);
+
+        let expected = concat!(
+            "root=n0\n",
+            "n0: variable=0, hi=n1, lo=n2\n",
+            "n1: variable=1, hi=ONE, lo=ONE\n",
+            "n2: variable=2, hi=ONE, lo=ONE",
+        );
+        assert_eq!(first.normalized_snapshot(&first_root), expected);
+        assert_eq!(second.normalized_snapshot(&second_root), expected);
     }
 }
