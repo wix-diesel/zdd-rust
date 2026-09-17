@@ -169,5 +169,5 @@ enum FilterWork {
 }
 
 #[cfg(test)]
-#[path = "../../test/zdd_internal.rs"]
+#[path = "../../tests/internal/zdd.rs"]
 mod tests;

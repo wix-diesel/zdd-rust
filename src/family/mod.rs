@@ -102,5 +102,5 @@ pub struct CardinalityFilter<'a> {
 }
 
 #[cfg(test)]
-#[path = "../../test/family_internal.rs"]
+#[path = "../../tests/internal/family.rs"]
 mod tests;

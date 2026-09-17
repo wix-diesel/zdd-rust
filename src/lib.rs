@@ -12,7 +12,7 @@ mod family;
 mod zdd;
 
 #[cfg(test)]
-#[path = "../test/test_support.rs"]
+#[path = "../tests/internal/test_support.rs"]
 mod test_support;
 
 pub use family::{

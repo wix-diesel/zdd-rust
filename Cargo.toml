@@ -28,4 +28,4 @@ proptest = { version = "1.7", default-features = false, features = ["std"] }
 
 [[test]]
 name = "public_api"
-path = "test/public_api.rs"
+path = "tests/public_api.rs"
