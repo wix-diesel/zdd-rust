@@ -25,6 +25,14 @@ pub enum GraphError {
         /// The graph's number of edges.
         edge_count: usize,
     },
+    /// A variable cannot be resolved through this graph space's edge mapping.
+    #[non_exhaustive]
+    InvalidVariableMap {
+        /// The rejected variable index.
+        variable_index: usize,
+        /// The number of variables in the graph space.
+        variable_count: usize,
+    },
     /// A self loop was supplied to an undirected simple graph.
     #[non_exhaustive]
     SelfLoop {
@@ -77,6 +85,13 @@ impl fmt::Display for GraphError {
             Self::InvalidEdge { index, edge_count } => write!(
                 formatter,
                 "edge index {index} is outside a graph of {edge_count} edges"
+            ),
+            Self::InvalidVariableMap {
+                variable_index,
+                variable_count,
+            } => write!(
+                formatter,
+                "variable index {variable_index} cannot be mapped in a graph space of {variable_count} variables"
             ),
             Self::SelfLoop { edge_index, vertex } => {
                 write!(

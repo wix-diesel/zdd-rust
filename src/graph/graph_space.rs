@@ -70,9 +70,9 @@ impl GraphSpace {
             .variable_to_edge
             .get(variable.index())
             .copied()
-            .ok_or(GraphError::InvalidEdge {
-                index: variable.index(),
-                edge_count: self.graph().edge_count(),
+            .ok_or(GraphError::InvalidVariableMap {
+                variable_index: variable.index(),
+                variable_count: self.graph().edge_count(),
             })
     }
 

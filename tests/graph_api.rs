@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::ops::ControlFlow;
 
-use zdd_family::{BigUint, EdgeId, EdgeOrder, Graph, GraphError, GraphSpace};
+use zdd_family::{BigUint, EdgeId, EdgeOrder, FamilySpace, Graph, GraphError, GraphSpace};
 
 fn edge_indices(edges: &[EdgeId]) -> BTreeSet<usize> {
     edges.iter().map(|edge| edge.index()).collect()
@@ -57,6 +57,28 @@ fn graph_space_validates_complete_edge_orders() {
         EdgeOrder::new(&graph, [edge0, edge0]),
         Err(GraphError::DuplicateOrderedEdge { .. })
     ));
+}
+
+#[test]
+fn edge_for_variable_reports_a_variable_mapping_error() {
+    let graph = Graph::from_edges(3, [(0, 1), (1, 2)]).unwrap();
+    let space = GraphSpace::new(&graph).unwrap();
+    let larger_space = FamilySpace::new(3).unwrap();
+    let out_of_range = larger_space.variable(2).unwrap();
+
+    let error = space.edge_for_variable(out_of_range).unwrap_err();
+    assert!(matches!(
+        error,
+        GraphError::InvalidVariableMap {
+            variable_index: 2,
+            variable_count: 2,
+            ..
+        }
+    ));
+    assert_eq!(
+        error.to_string(),
+        "variable index 2 cannot be mapped in a graph space of 2 variables"
+    );
 }
 
 #[test]
