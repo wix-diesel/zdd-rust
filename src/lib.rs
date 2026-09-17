@@ -24,10 +24,12 @@ pub use num_bigint::BigUint;
 
 #[cfg(feature = "graph")]
 pub use graph::{
-    EdgeCardinalityFilter, EdgeFamily, EdgeId, EdgeOrder, EdgeOrdering, EdgeSolution,
+    BfsOrder, EdgeCardinalityFilter, EdgeFamily, EdgeId, EdgeOrder, EdgeOrdering, EdgeSolution,
     EdgeSolutionIterator, Graph, GraphError, GraphSpace, GraphSpaceBuilder, InputOrder, VertexId,
 };
 
+#[cfg(feature = "graph")]
+pub use frontier::{EdgeStep, FrontierPlan, FrontierSlot};
 #[cfg(feature = "graph")]
 mod frontier;
 #[cfg(feature = "graph")]

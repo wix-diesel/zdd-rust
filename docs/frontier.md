@@ -169,7 +169,9 @@ State本体を二層に限定しても、後ろ向き構築用の遷移記録は
 
 `EdgeOrdering::order(&Graph) -> Result<EdgeOrder, OrderingError>`を小さな公開拡張点にする。EdgeOrderは全辺を一度ずつ含む検証済み順列。
 
-v1は入力順・ユーザー順・BFS-basedを提供。BFS-basedは各連結成分を決定的な頂点/辺順で処理し、同点規則を固定する。詳細な辺出力規則は実装前のfixtureで確定し、単に「BFS」とだけして再現性を曖昧にしない。
+v1は入力順・ユーザー順・BFS-basedを提供。BFS-basedは最小IDの未訪問頂点から各連結成分を開始し、FIFOで頂点を訪問する。各頂点ではincident edgeを入力EdgeId順に調べ、辺はいずれかの端点から最初に調べられた時点で出力する。未訪問の反対側端点はその時点でqueueへ追加する。孤立頂点は成分の開始点にはなるが辺を出力しない。この規則により、非連結成分、非tree辺、同一BFS距離の同点を含めて出力順を一意にする。
+
+`FrontierPlan`のslotは頂点のfirst incidentからlast incidentまで固定し、空いた最小slotを再利用する。planが保持するのは各辺の定数個の局所情報と、各非孤立頂点につき1回ずつのintroduce/forget eventである。全層のfrontier snapshotは保持せず、consumerの作業配列は`max_working_frontier_width`個のslotで足りる。DFS、greedy minimum-frontier、複数候補を評価するAuto、pathwidth/treewidth-aware heuristicはv1非スコープとする。
 
 v1.xはDFS、greedy minimum-frontier、複数候補の幅評価によるAuto。Autoは最小幅を保証しない。pathwidth/treewidth-awareはfutureで、tree decompositionの幅と線形辺順のfrontier幅を同一視しない。
 

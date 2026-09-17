@@ -14,4 +14,4 @@ pub use error::GraphError;
 pub use graph_data::Graph;
 pub use graph_space::{GraphSpace, GraphSpaceBuilder};
 pub use ids::{EdgeId, VertexId};
-pub use ordering::{EdgeOrder, EdgeOrdering, InputOrder};
+pub use ordering::{BfsOrder, EdgeOrder, EdgeOrdering, InputOrder};
