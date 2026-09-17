@@ -12,7 +12,7 @@ categories = ["data-structures", "mathematics"]
 
 [features]
 default = ["graph"]
-# Graph and frontier APIs will be added behind this feature in subsequent issues.
+# Graph data and typed edge-family APIs. Frontier APIs are added separately.
 graph = []
 # Sampling will remain opt-in until its API is implemented.
 sampling = []
