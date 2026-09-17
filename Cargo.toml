@@ -25,3 +25,7 @@ oxidd = { version = "0.12.0", git = "https://github.com/OxiDD/oxidd.git", rev = 
 
 [dev-dependencies]
 proptest = { version = "1.7", default-features = false, features = ["std"] }
+
+[[test]]
+name = "public_api"
+path = "tests/public_api.rs"
