@@ -87,6 +87,10 @@ impl OracleFamily {
         self.sets.is_subset(&other.sets)
     }
 
+    pub(crate) fn count(&self) -> usize {
+        self.sets.len()
+    }
+
     pub(crate) fn filter_contains(&self, variable: usize) -> Self {
         self.filtered(|set| set & (1u64 << variable) != 0)
     }

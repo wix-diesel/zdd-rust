@@ -4,7 +4,12 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::zdd::{ApplyError, ApplyOp, ApplyStats, CreateError, FilterSpec, Root, ZddManager};
+use num_bigint::BigUint;
+
+use crate::zdd::{
+    ApplyError, ApplyOp, ApplyStats, CreateError, FilterSpec, QUERY_ONE, QUERY_ZERO, QueryDag,
+    Root, ZddManager,
+};
 
 /// An element identifier in a [`FamilySpace`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -47,6 +52,26 @@ impl Default for Limits {
     }
 }
 
+/// Per-query limits for an owned local DAG and its exact partial counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QueryLimits {
+    /// Maximum number of distinct reachable nonterminal nodes in the snapshot.
+    pub max_snapshot_nodes: usize,
+    /// Maximum sum of `BigUint::bits()` over all retained partial counts.
+    ///
+    /// This is a deterministic logical-size limit, not an allocator or RSS limit.
+    pub max_total_count_bits: usize,
+}
+
+impl Default for QueryLimits {
+    fn default() -> Self {
+        Self {
+            max_snapshot_nodes: 1_000_000,
+            max_total_count_bits: 67_108_864,
+        }
+    }
+}
+
 /// The resource whose limit was exceeded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -55,7 +80,77 @@ pub enum LimitKind {
     Node,
     /// Distinct keys retained by one operation-local memo table.
     OperationMemo,
+    /// Distinct nonterminal nodes copied into a query-local DAG.
+    QueryNodes,
+    /// Logical bits in all exact partial counts retained by a query.
+    CountBits,
 }
+
+/// Statistics collected while constructing a [`CountIndex`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct QueryStats {
+    /// Distinct reachable nonterminal nodes copied into the local snapshot.
+    pub snapshot_nodes: usize,
+    /// Sum of `BigUint::bits()` for all retained partial counts.
+    pub total_count_bits: usize,
+    /// Largest `BigUint::bits()` value among retained partial counts.
+    pub max_count_bits: usize,
+}
+
+/// Error returned while building a bounded query index.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum QueryError {
+    /// A configured query resource limit was exceeded.
+    #[non_exhaustive]
+    LimitExceeded {
+        /// The query resource that could not be added.
+        kind: LimitKind,
+        /// The configured maximum value.
+        limit: usize,
+        /// The value that the query attempted to reach.
+        attempted: usize,
+        /// Work completed before the limit was encountered.
+        stats: QueryStats,
+    },
+}
+
+impl fmt::Display for QueryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LimitExceeded {
+                kind,
+                limit,
+                attempted,
+                ..
+            } => write!(
+                formatter,
+                "{kind:?} limit {limit} exceeded while attempting to use {attempted}"
+            ),
+        }
+    }
+}
+
+impl StdError for QueryError {}
+
+/// Error returned by a fixed-width count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CountError {
+    /// The exact family size does not fit in `u128`.
+    Overflow,
+}
+
+impl fmt::Display for CountError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Overflow => formatter.write_str("the exact family count exceeds u128"),
+        }
+    }
+}
+
+impl StdError for CountError {}
 
 /// Statistics collected for one set-family operation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -216,6 +311,23 @@ pub struct FamilySpaceBuilder {
 pub struct SetFamily {
     space: Arc<SpaceInner>,
     root: Root,
+}
+
+/// An owned query-local DAG and exact count for every reachable branch.
+///
+/// The index is detached from its source [`SetFamily`] and [`FamilySpace`], so
+/// it remains valid after both are dropped. It can be reused by later sampling
+/// and rank operations without retaining an unbounded manager-global cache.
+#[derive(Clone, Debug)]
+pub struct CountIndex {
+    dag: QueryDag,
+    counts: Vec<Option<BigUint>>,
+    stats: QueryStats,
+}
+
+enum CountWork {
+    Visit(usize),
+    Finish(usize),
 }
 
 /// Builder-like view for filtering a family by the number of selected elements.
@@ -484,6 +596,47 @@ impl SetFamily {
         CardinalityFilter { family: self }
     }
 
+    /// Returns the exact number of sets in this family.
+    ///
+    /// This performs query-local arbitrary-precision allocation and therefore
+    /// cannot recover from allocator OOM. Use [`Self::count_index`] when the
+    /// snapshot and retained-count sizes must have explicit limits.
+    #[must_use]
+    pub fn count(&self) -> BigUint {
+        let dag = self
+            .space
+            .manager
+            .query_snapshot(&self.root, usize::MAX)
+            .expect("an unbounded snapshot cannot hit its logical node limit");
+        CountIndex::from_dag(dag, None)
+            .expect("an unbounded count cannot hit its logical bit limit")
+            .count()
+            .clone()
+    }
+
+    /// Returns the number of sets when it fits in `u128`.
+    pub fn try_count_u128(&self) -> Result<u128, CountError> {
+        u128::try_from(self.count()).map_err(|_| CountError::Overflow)
+    }
+
+    /// Builds a reusable exact-count index under explicit query limits.
+    pub fn count_index(&self, limits: &QueryLimits) -> Result<CountIndex, QueryError> {
+        let dag = self
+            .space
+            .manager
+            .query_snapshot(&self.root, limits.max_snapshot_nodes)
+            .map_err(|error| QueryError::LimitExceeded {
+                kind: LimitKind::QueryNodes,
+                limit: limits.max_snapshot_nodes,
+                attempted: error.attempted,
+                stats: QueryStats {
+                    snapshot_nodes: error.snapshot_nodes,
+                    ..QueryStats::default()
+                },
+            })?;
+        CountIndex::from_dag(dag, Some(limits))
+    }
+
     /// Returns whether this family contains no sets.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -623,6 +776,112 @@ impl SetFamily {
     }
 }
 
+impl CountIndex {
+    fn from_dag(dag: QueryDag, limits: Option<&QueryLimits>) -> Result<Self, QueryError> {
+        let mut counts = vec![None; dag.nodes.len() + 2];
+        let mut stats = QueryStats {
+            snapshot_nodes: dag.nodes.len(),
+            ..QueryStats::default()
+        };
+        let mut work = vec![CountWork::Visit(dag.root)];
+
+        while let Some(item) = work.pop() {
+            match item {
+                CountWork::Visit(reference) => {
+                    if counts[reference].is_some() {
+                        continue;
+                    }
+                    match reference {
+                        QUERY_ZERO => Self::store_count(
+                            reference,
+                            BigUint::from(0u8),
+                            &mut counts,
+                            &mut stats,
+                            limits,
+                        )?,
+                        QUERY_ONE => Self::store_count(
+                            reference,
+                            BigUint::from(1u8),
+                            &mut counts,
+                            &mut stats,
+                            limits,
+                        )?,
+                        _ => {
+                            let node = &dag.nodes[reference - 2];
+                            for child in [node.hi, node.lo] {
+                                if child >= 2 {
+                                    debug_assert!(
+                                        node.variable < dag.nodes[child - 2].variable,
+                                        "ZDD children must follow their parent variable"
+                                    );
+                                }
+                            }
+                            work.push(CountWork::Finish(reference));
+                            work.push(CountWork::Visit(node.hi));
+                            work.push(CountWork::Visit(node.lo));
+                        }
+                    }
+                }
+                CountWork::Finish(reference) => {
+                    if counts[reference].is_some() {
+                        continue;
+                    }
+                    let node = &dag.nodes[reference - 2];
+                    let value = counts[node.lo]
+                        .as_ref()
+                        .expect("LO count is computed before its parent")
+                        + counts[node.hi]
+                            .as_ref()
+                            .expect("HI count is computed before its parent");
+                    Self::store_count(reference, value, &mut counts, &mut stats, limits)?;
+                }
+            }
+        }
+
+        Ok(Self { dag, counts, stats })
+    }
+
+    fn store_count(
+        reference: usize,
+        value: BigUint,
+        counts: &mut [Option<BigUint>],
+        stats: &mut QueryStats,
+        limits: Option<&QueryLimits>,
+    ) -> Result<(), QueryError> {
+        let bits =
+            usize::try_from(value.bits()).expect("64-bit targets represent BigUint bit sizes");
+        let attempted = stats.total_count_bits.saturating_add(bits);
+        if let Some(limits) = limits
+            && attempted > limits.max_total_count_bits
+        {
+            return Err(QueryError::LimitExceeded {
+                kind: LimitKind::CountBits,
+                limit: limits.max_total_count_bits,
+                attempted,
+                stats: stats.clone(),
+            });
+        }
+        stats.total_count_bits = attempted;
+        stats.max_count_bits = stats.max_count_bits.max(bits);
+        counts[reference] = Some(value);
+        Ok(())
+    }
+
+    /// Returns the exact number of sets represented by this index.
+    #[must_use]
+    pub fn count(&self) -> &BigUint {
+        self.counts[self.dag.root]
+            .as_ref()
+            .expect("the root count is always retained")
+    }
+
+    /// Returns the resource measurements from index construction.
+    #[must_use]
+    pub fn stats(&self) -> &QueryStats {
+        &self.stats
+    }
+}
+
 impl CardinalityFilter<'_> {
     /// Keeps sets containing exactly `count` elements.
     pub fn exactly(&self, count: usize) -> Result<SetFamily, Error> {
@@ -714,6 +973,10 @@ mod tests {
         assert_eq!(limits.max_frontier_states, 1_000_000);
         assert_eq!(limits.max_frontier_transitions, 10_000_000);
         assert_eq!(limits.shared_cache_entries, 262_144);
+
+        let query_limits = QueryLimits::default();
+        assert_eq!(query_limits.max_snapshot_nodes, 1_000_000);
+        assert_eq!(query_limits.max_total_count_bits, 67_108_864);
     }
 
     #[test]
@@ -727,6 +990,126 @@ mod tests {
                 .manager
                 .roots_equal(&space.powerset().unwrap().root, &space.unit().root)
         );
+    }
+
+    #[test]
+    fn exact_counts_cover_terminals_powersets_and_skipped_variables() {
+        let empty_space = small_space(0);
+        assert_eq!(empty_space.empty().count(), BigUint::from(0u8));
+        assert_eq!(empty_space.unit().count(), BigUint::from(1u8));
+        assert_eq!(empty_space.powerset().unwrap().count(), BigUint::from(1u8));
+
+        let space = small_space(5);
+        assert_eq!(space.powerset().unwrap().count(), BigUint::from(32u8));
+        let last = space.variable(4).unwrap();
+        let skipped = space.from_sets([vec![], vec![last]]).unwrap();
+        assert_eq!(skipped.count(), BigUint::from(2u8));
+        assert_eq!(skipped.try_count_u128(), Ok(2));
+    }
+
+    #[test]
+    fn fixed_width_count_reports_overflow_but_exact_count_does_not() {
+        let boundary_space = small_space(128);
+        let boundary = boundary_space
+            .powerset()
+            .unwrap()
+            .difference(&boundary_space.unit())
+            .unwrap();
+        assert_eq!(boundary.try_count_u128(), Ok(u128::MAX));
+
+        let space = small_space(129);
+        let family = space.powerset().unwrap();
+        assert_eq!(family.count(), BigUint::from(1u8) << 129usize);
+        assert_eq!(family.try_count_u128(), Err(CountError::Overflow));
+    }
+
+    #[test]
+    fn count_index_is_detached_and_reports_logical_memory() {
+        let index = {
+            let space = small_space(3);
+            let family = space.powerset().unwrap();
+            family.count_index(&QueryLimits::default()).unwrap()
+        };
+
+        assert_eq!(index.count(), &BigUint::from(8u8));
+        assert_eq!(index.stats().snapshot_nodes, 3);
+        assert_eq!(index.stats().total_count_bits, 10);
+        assert_eq!(index.stats().max_count_bits, 4);
+    }
+
+    #[test]
+    fn count_index_enforces_node_and_count_bit_boundaries() {
+        let space = small_space(3);
+        let family = space.powerset().unwrap();
+
+        let exact = QueryLimits {
+            max_snapshot_nodes: 3,
+            max_total_count_bits: 10,
+        };
+        assert_eq!(
+            family.count_index(&exact).unwrap().count(),
+            &BigUint::from(8u8)
+        );
+
+        let node_error = family
+            .count_index(&QueryLimits {
+                max_snapshot_nodes: 2,
+                ..exact.clone()
+            })
+            .unwrap_err();
+        assert!(matches!(
+            node_error,
+            QueryError::LimitExceeded {
+                kind: LimitKind::QueryNodes,
+                limit: 2,
+                attempted: 3,
+                stats: QueryStats {
+                    snapshot_nodes: 2,
+                    ..
+                },
+            }
+        ));
+
+        let bit_error = family
+            .count_index(&QueryLimits {
+                max_total_count_bits: 9,
+                ..exact
+            })
+            .unwrap_err();
+        assert!(matches!(
+            bit_error,
+            QueryError::LimitExceeded {
+                kind: LimitKind::CountBits,
+                limit: 9,
+                attempted: 10,
+                stats: QueryStats {
+                    total_count_bits: 6,
+                    max_count_bits: 3,
+                    ..
+                },
+            }
+        ));
+    }
+
+    #[test]
+    fn zero_count_needs_no_count_bits_but_unit_needs_one() {
+        let space = small_space(0);
+        let limits = QueryLimits {
+            max_snapshot_nodes: 0,
+            max_total_count_bits: 0,
+        };
+        assert_eq!(
+            space.empty().count_index(&limits).unwrap().count(),
+            &BigUint::from(0u8)
+        );
+        assert!(matches!(
+            space.unit().count_index(&limits),
+            Err(QueryError::LimitExceeded {
+                kind: LimitKind::CountBits,
+                attempted: 1,
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -901,6 +1284,7 @@ mod tests {
         let prefix = long[..VARIABLE_COUNT - 1].to_vec();
 
         let family = space.from_sets([long, prefix]).unwrap();
+        assert_eq!(family.count(), BigUint::from(2u8));
         assert!(!family.is_empty());
         let result = family.intersection(&space.powerset().unwrap()).unwrap();
         assert!(result.equivalent(&family).unwrap());
@@ -973,6 +1357,7 @@ mod tests {
             let oracle = OracleFamily::from_family_mask(4, mask);
             let family = oracle.build_in_with_normalization_noise(&space);
             oracle.assert_matches(&space, &family);
+            assert_eq!(family.count(), BigUint::from(oracle.count()));
             assert!(family.equivalent(&oracle.build_in(&space)).unwrap());
         }
     }

@@ -7,6 +7,11 @@
 Rust 1.98とする。MSRVを上げる場合は、依存関係を含む根拠を記録し、1.xではminor releaseで
 のみ変更する。
 
+厳密な集合族の解数には`num-bigint` 0.4系の`BigUint`を使用する。`count()`と
+`CountIndex`の公開契約が任意精度の非負整数を必要とし、同crateはpure Rustかつ
+MIT/Apache-2.0で、MSRV・ライセンス方針を満たすためである。部分解数はqueryごとに所有し、
+managerの無制限なglobal cacheには保存しない。
+
 ## 初期backend
 
 `oxidd`は公開APIに現れないprivate dependencyとして、確認済みのOxiDD 0.12.0の
