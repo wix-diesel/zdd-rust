@@ -2,6 +2,8 @@
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::iter::FusedIterator;
+use std::ops::{ControlFlow, Deref};
 use std::sync::Arc;
 
 use num_bigint::BigUint;
@@ -313,6 +315,79 @@ pub struct SetFamily {
     root: Root,
 }
 
+/// One owned set produced while enumerating a [`SetFamily`].
+///
+/// Elements are ordered by their fixed variable order and occur at most once.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Solution(Vec<VariableId>);
+
+impl Solution {
+    /// Returns the elements in fixed variable order.
+    #[must_use]
+    pub fn as_slice(&self) -> &[VariableId] {
+        &self.0
+    }
+
+    /// Consumes the solution and returns its element storage.
+    #[must_use]
+    pub fn into_vec(self) -> Vec<VariableId> {
+        self.0
+    }
+}
+
+impl AsRef<[VariableId]> for Solution {
+    fn as_ref(&self) -> &[VariableId] {
+        self.as_slice()
+    }
+}
+
+impl Deref for Solution {
+    type Target = [VariableId];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl IntoIterator for Solution {
+    type Item = VariableId;
+    type IntoIter = std::vec::IntoIter<VariableId>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Solution {
+    type Item = &'a VariableId;
+    type IntoIter = std::slice::Iter<'a, VariableId>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+/// A lazy, deterministic iterator over the sets in a [`SetFamily`].
+///
+/// The iterator owns a query-local DAG snapshot and remains valid after its
+/// source family and space are dropped. Each yielded [`Solution`] owns a new
+/// element buffer; use [`SetFamily::visit_solutions`] to reuse one buffer.
+pub struct SolutionIterator {
+    traversal: SolutionTraversal,
+}
+
+struct SolutionTraversal {
+    dag: QueryDag,
+    stack: Vec<TraversalStep>,
+    current: Vec<VariableId>,
+}
+
+enum TraversalStep {
+    Visit(usize),
+    Include { reference: usize, variable: u32 },
+    Remove,
+}
+
 /// An owned query-local DAG and exact count for every reachable branch.
 ///
 /// The index is detached from its source [`SetFamily`] and [`FamilySpace`], so
@@ -619,6 +694,56 @@ impl SetFamily {
         u128::try_from(self.count()).map_err(|_| CountError::Overflow)
     }
 
+    /// Lazily enumerates the sets in deterministic exclude-first order.
+    ///
+    /// Construction copies the reachable DAG, but does not count or enumerate
+    /// its solutions. Consequently, methods such as [`Iterator::take`] visit
+    /// only the requested solution prefix. Each item owns its element buffer
+    /// and remains valid independently of this family and iterator.
+    ///
+    /// This iterator deliberately does not implement [`ExactSizeIterator`].
+    /// Its [`Iterator::size_hint`] does not derive a `usize` upper bound by
+    /// truncating a potentially much larger solution count.
+    ///
+    /// Unlike this method followed by [`Iterator::count`], [`Self::count`]
+    /// computes the exact number on the DAG without enumerating every set.
+    #[must_use]
+    pub fn iter(&self) -> SolutionIterator {
+        let dag = self
+            .space
+            .manager
+            .query_snapshot(&self.root, usize::MAX)
+            .expect("an unbounded snapshot cannot hit its logical node limit");
+        SolutionIterator {
+            traversal: SolutionTraversal::new(dag),
+        }
+    }
+
+    /// Visits sets in deterministic exclude-first order using one reused buffer.
+    ///
+    /// The slice is valid only for the duration of its callback invocation.
+    /// Returning [`ControlFlow::Break`] stops traversal immediately and returns
+    /// the supplied value. Unlike [`Self::iter`], this method performs no
+    /// per-solution output allocation. The manager guard is released before
+    /// the first callback, so the callback may safely call APIs on this space.
+    pub fn visit_solutions<B>(
+        &self,
+        mut visitor: impl FnMut(&[VariableId]) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        let dag = self
+            .space
+            .manager
+            .query_snapshot(&self.root, usize::MAX)
+            .expect("an unbounded snapshot cannot hit its logical node limit");
+        let mut traversal = SolutionTraversal::new(dag);
+        while let Some(solution) = traversal.next_slice() {
+            if let ControlFlow::Break(value) = visitor(solution) {
+                return ControlFlow::Break(value);
+            }
+        }
+        ControlFlow::Continue(())
+    }
+
     /// Builds a reusable exact-count index under explicit query limits.
     pub fn count_index(&self, limits: &QueryLimits) -> Result<CountIndex, QueryError> {
         let dag = self
@@ -882,6 +1007,65 @@ impl CountIndex {
     }
 }
 
+impl SolutionTraversal {
+    fn new(dag: QueryDag) -> Self {
+        let root = dag.root;
+        Self {
+            dag,
+            stack: vec![TraversalStep::Visit(root)],
+            current: Vec::new(),
+        }
+    }
+
+    fn next_slice(&mut self) -> Option<&[VariableId]> {
+        while let Some(step) = self.stack.pop() {
+            match step {
+                TraversalStep::Visit(QUERY_ZERO) => {}
+                TraversalStep::Visit(QUERY_ONE) => return Some(&self.current),
+                TraversalStep::Visit(reference) => {
+                    let node = &self.dag.nodes[reference - 2];
+                    // LIFO order: enumerate the LO branch completely before HI.
+                    self.stack.push(TraversalStep::Include {
+                        reference: node.hi,
+                        variable: node.variable,
+                    });
+                    self.stack.push(TraversalStep::Visit(node.lo));
+                }
+                TraversalStep::Include {
+                    reference,
+                    variable,
+                } => {
+                    self.current.push(VariableId(variable));
+                    self.stack.push(TraversalStep::Remove);
+                    self.stack.push(TraversalStep::Visit(reference));
+                }
+                TraversalStep::Remove => {
+                    self.current
+                        .pop()
+                        .expect("every traversal removal follows an inclusion");
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Iterator for SolutionIterator {
+    type Item = Solution;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.traversal
+            .next_slice()
+            .map(|elements| Solution(elements.to_vec()))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, None)
+    }
+}
+
+impl FusedIterator for SolutionIterator {}
+
 impl CardinalityFilter<'_> {
     /// Keeps sets containing exactly `count` elements.
     pub fn exactly(&self, count: usize) -> Result<SetFamily, Error> {
@@ -1021,6 +1205,162 @@ mod tests {
         let family = space.powerset().unwrap();
         assert_eq!(family.count(), BigUint::from(1u8) << 129usize);
         assert_eq!(family.try_count_u128(), Err(CountError::Overflow));
+    }
+
+    #[test]
+    fn iterator_distinguishes_terminals_and_uses_exclude_first_order() {
+        let space = small_space(3);
+        let a = space.variable(0).unwrap();
+        let b = space.variable(1).unwrap();
+        let c = space.variable(2).unwrap();
+
+        assert_eq!(space.empty().iter().next(), None);
+        assert_eq!(
+            space
+                .unit()
+                .iter()
+                .map(Solution::into_vec)
+                .collect::<Vec<_>>(),
+            vec![vec![]]
+        );
+        assert_eq!(
+            space
+                .powerset()
+                .unwrap()
+                .iter()
+                .map(Solution::into_vec)
+                .collect::<Vec<_>>(),
+            vec![
+                vec![],
+                vec![c],
+                vec![b],
+                vec![b, c],
+                vec![a],
+                vec![a, c],
+                vec![a, b],
+                vec![a, b, c],
+            ]
+        );
+    }
+
+    #[test]
+    fn every_small_family_is_enumerated_once_and_deterministically() {
+        let space = small_space(3);
+        let exclude_first = [0u64, 4, 2, 6, 1, 5, 3, 7];
+
+        for family_mask in 0u64..=255 {
+            let family = OracleFamily::from_family_mask(3, family_mask).build_in(&space);
+            let actual = family
+                .iter()
+                .map(|solution| {
+                    solution
+                        .iter()
+                        .fold(0u64, |set, variable| set | (1 << variable.index()))
+                })
+                .collect::<Vec<_>>();
+            let expected = exclude_first
+                .iter()
+                .copied()
+                .filter(|set| family_mask & (1 << set) != 0)
+                .collect::<Vec<_>>();
+
+            assert_eq!(actual, expected, "family mask {family_mask:#010b}");
+            assert_eq!(
+                family.iter().collect::<Vec<_>>(),
+                family.iter().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn iterator_is_detached_and_owned_solutions_outlive_it() {
+        let (mut iterator, a) = {
+            let space = small_space(1);
+            let a = space.variable(0).unwrap();
+            (space.powerset().unwrap().iter(), a)
+        };
+
+        let empty = iterator.next().unwrap();
+        let selected = iterator.next().unwrap();
+        drop(iterator);
+        assert!(empty.is_empty());
+        assert_eq!(selected.as_slice(), &[a]);
+    }
+
+    #[test]
+    fn large_family_take_visits_only_a_prefix_without_counting() {
+        let space = small_space(129);
+        let last = space.variable(128).unwrap();
+        let penultimate = space.variable(127).unwrap();
+        let mut iterator = space.powerset().unwrap().iter();
+
+        assert_eq!(iterator.size_hint(), (0, None));
+        assert_eq!(
+            iterator
+                .by_ref()
+                .take(3)
+                .map(Solution::into_vec)
+                .collect::<Vec<_>>(),
+            vec![vec![], vec![last], vec![penultimate]]
+        );
+        assert_eq!(iterator.size_hint(), (0, None));
+    }
+
+    #[test]
+    fn visitor_reuses_traversal_state_allows_reentry_and_stops_early() {
+        let space = small_space(6);
+        let family = space.powerset().unwrap();
+        let mut visited = Vec::new();
+
+        let result = family.visit_solutions(|solution| {
+            assert!(family.contains(solution).unwrap());
+            assert_eq!(
+                family.intersection(&space.unit()).unwrap().count(),
+                1u8.into()
+            );
+            visited.push(solution.to_vec());
+            if visited.len() == 5 {
+                ControlFlow::Break("enough")
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+
+        assert_eq!(result, ControlFlow::Break("enough"));
+        assert_eq!(visited.len(), 5);
+        assert_eq!(
+            visited,
+            family
+                .iter()
+                .take(5)
+                .map(Solution::into_vec)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn visitor_handles_empty_family_and_empty_solution() {
+        let space = small_space(0);
+        let mut empty_calls = 0;
+        assert_eq!(
+            space.empty().visit_solutions::<()>(|_| {
+                empty_calls += 1;
+                ControlFlow::Continue(())
+            }),
+            ControlFlow::Continue(())
+        );
+        assert_eq!(empty_calls, 0);
+
+        let mut unit_calls = 0;
+        assert_eq!(
+            space.unit().visit_solutions::<()>(|solution| {
+                unit_calls += 1;
+                assert!(solution.is_empty());
+                ControlFlow::Continue(())
+            }),
+            ControlFlow::Continue(())
+        );
+        assert_eq!(unit_calls, 1);
     }
 
     #[test]
