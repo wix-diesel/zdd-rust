@@ -15,9 +15,11 @@ mod zdd;
 mod test_support;
 
 pub use family::{
-    CardinalityFilter, Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationReport,
-    OperationStats, SetFamily, SpaceStats, VariableId,
+    CardinalityFilter, CountError, CountIndex, Error, FamilySpace, FamilySpaceBuilder, LimitKind,
+    Limits, OperationReport, OperationStats, QueryError, QueryLimits, QueryStats, SetFamily,
+    SpaceStats, VariableId,
 };
+pub use num_bigint::BigUint;
 
 #[cfg(feature = "graph")]
 mod frontier;
