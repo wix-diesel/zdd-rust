@@ -87,6 +87,26 @@ impl OracleFamily {
         self.sets.is_subset(&other.sets)
     }
 
+    pub(crate) fn filter_contains(&self, variable: usize) -> Self {
+        self.filtered(|set| set & (1u64 << variable) != 0)
+    }
+
+    pub(crate) fn filter_excludes(&self, variable: usize) -> Self {
+        self.filtered(|set| set & (1u64 << variable) == 0)
+    }
+
+    pub(crate) fn filter_subsets_of(&self, allowed: u64) -> Self {
+        self.filtered(|set| set & !allowed == 0)
+    }
+
+    pub(crate) fn filter_supersets_of(&self, required: u64) -> Self {
+        self.filtered(|set| set & required == required)
+    }
+
+    pub(crate) fn filter_cardinality(&self, lower: usize, upper: usize) -> Self {
+        self.filtered(|set| (lower..=upper).contains(&(set.count_ones() as usize)))
+    }
+
     pub(crate) fn assert_matches(&self, space: &FamilySpace, actual: &SetFamily) {
         for subset in 0..(1usize << self.variable_count) {
             let elements = (0..self.variable_count)
@@ -113,6 +133,18 @@ impl OracleFamily {
         Self {
             variable_count: self.variable_count,
             sets,
+        }
+    }
+
+    fn filtered(&self, include: impl Fn(u64) -> bool) -> Self {
+        Self {
+            variable_count: self.variable_count,
+            sets: self
+                .sets
+                .iter()
+                .copied()
+                .filter(|set| include(*set))
+                .collect(),
         }
     }
 }

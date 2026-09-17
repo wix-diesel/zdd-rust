@@ -15,8 +15,8 @@ mod zdd;
 mod test_support;
 
 pub use family::{
-    Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationReport, OperationStats,
-    SetFamily, SpaceStats, VariableId,
+    CardinalityFilter, Error, FamilySpace, FamilySpaceBuilder, LimitKind, Limits, OperationReport,
+    OperationStats, SetFamily, SpaceStats, VariableId,
 };
 
 #[cfg(feature = "graph")]
