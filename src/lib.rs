@@ -17,7 +17,7 @@ mod test_support;
 pub use family::{
     CardinalityFilter, CountError, CountIndex, Error, FamilySpace, FamilySpaceBuilder, LimitKind,
     Limits, OperationReport, OperationStats, QueryError, QueryLimits, QueryStats, SetFamily,
-    SpaceStats, VariableId,
+    Solution, SolutionIterator, SpaceStats, VariableId,
 };
 pub use num_bigint::BigUint;
 
