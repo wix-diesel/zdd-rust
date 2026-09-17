@@ -15,6 +15,7 @@
 | `Graph`, `VertexId`, `EdgeId` | 無向単純グラフと軽量なgraph内ID |
 | `GraphSpace` | GraphをFamilySpaceへ結び付ける高水準入口 |
 | `EdgeFamily`, `EdgeSolution` | 元Graphの対応を持つFamilyと所有されたEdgeId列 |
+| `FrontierPlan`, `EdgeStep`, `FrontierSlot` | 固定辺順のintroduce/forget scheduleと、`O(w)`作業frontier用の安定slot |
 | `FrontierBuilder`, `FrontierProblem` | 独自問題の入口 |
 | `Limits`, `QueryLimits` | space/操作とqueryの有限な既定上限 |
 | `SpaceStats`, `OperationStats`, `BuildStats`, `QueryStats` | manager全体と一操作の統計。ノード数と解数を区別 |
