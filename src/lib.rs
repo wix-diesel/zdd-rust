@@ -23,6 +23,12 @@ pub use family::{
 pub use num_bigint::BigUint;
 
 #[cfg(feature = "graph")]
+pub use graph::{
+    EdgeCardinalityFilter, EdgeFamily, EdgeId, EdgeOrder, EdgeOrdering, EdgeSolution,
+    EdgeSolutionIterator, Graph, GraphError, GraphSpace, GraphSpaceBuilder, InputOrder, VertexId,
+};
+
+#[cfg(feature = "graph")]
 mod frontier;
 #[cfg(feature = "graph")]
 mod graph;
