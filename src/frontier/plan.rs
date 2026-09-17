@@ -102,6 +102,13 @@ impl FrontierPlan {
                 }
             }
             let working_width = active;
+            // Every endpoint is assigned a slot at its first incident step,
+            // which is no later than the current step, and the assignment is
+            // retained after forgetting so EdgeStep can expose stable slots.
+            let assigned_slot = |vertex: VertexId| {
+                vertex_slots[vertex.index()]
+                    .expect("an edge endpoint must have an assigned frontier slot")
+            };
 
             let mut remaining_incident = [0; 2];
             for (position, vertex) in pair.into_iter().enumerate() {
@@ -115,7 +122,7 @@ impl FrontierPlan {
             for vertex in leaving {
                 if last_incident[vertex.index()] == Some(level) {
                     forgotten.push(vertex);
-                    let slot = vertex_slots[vertex.index()].ok_or(GraphError::CapacityOverflow)?;
+                    let slot = assigned_slot(vertex);
                     free_slots.push(Reverse(slot.index()));
                     active -= 1;
                 }
@@ -123,10 +130,7 @@ impl FrontierPlan {
             let width_after = active;
             max_frontier_width = max_frontier_width.max(width_before).max(width_after);
             max_working_frontier_width = max_working_frontier_width.max(working_width);
-            let endpoint_slots = [
-                vertex_slots[pair[0].index()].ok_or(GraphError::CapacityOverflow)?,
-                vertex_slots[pair[1].index()].ok_or(GraphError::CapacityOverflow)?,
-            ];
+            let endpoint_slots = [assigned_slot(pair[0]), assigned_slot(pair[1])];
             steps.push(StepData {
                 edge,
                 variable,
