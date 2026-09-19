@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::{BuildError, FamilySpace, FrontierBuilder, Limits, SetFamily, SpaceStats, VariableId};
 
-use super::{EdgeFamily, EdgeId, EdgeOrder, EdgeOrdering, Graph, GraphError, InputOrder};
+use super::{EdgeFamily, EdgeId, EdgeOrder, EdgeOrdering, Graph, GraphError, InputOrder, VertexId};
 
 pub(super) struct GraphSpaceInner {
     pub(super) graph: Graph,
@@ -108,6 +108,20 @@ impl GraphSpace {
     /// maximal or maximum-cardinality matchings.
     pub fn matchings(&self) -> Result<EdgeFamily, BuildError<Infallible>> {
         FrontierBuilder::new(self).build(crate::problems::MatchingProblem)
+    }
+
+    /// Returns the family of all vertex-simple paths from `source` to `target`.
+    ///
+    /// Each path is represented by its edge set, so its orientation and
+    /// traversal order do not create duplicate solutions. Equal or out-of-range
+    /// endpoints are reported as problem errors. A valid pair with no path
+    /// produces the empty family.
+    pub fn paths(
+        &self,
+        source: VertexId,
+        target: VertexId,
+    ) -> Result<EdgeFamily, BuildError<GraphError>> {
+        FrontierBuilder::new(self).build(crate::problems::PathProblem::new(source, target))
     }
 
     /// Builds an edge family from explicit edge sets.
