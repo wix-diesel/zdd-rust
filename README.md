@@ -4,7 +4,7 @@
 
 Frontier-based Searchを、グラフの解集合を効率よく構築する中核機能として提供します。構築後は同じSet Family APIで条件を追加し、集合族を再利用できることを目指します。将来は加法重みによる最適化、rank/unrank、weighted samplingへ拡張します。
 
-現在はグラフに依存しない`FamilySpace`の集合演算・queryに加え、immutableな`Graph`、`GraphSpace`、型付き`EdgeFamily`を実装済みです。Frontier APIはロードマップに沿って順次追加します。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
+現在はグラフに依存しない`FamilySpace`の集合演算・queryに加え、immutableな`Graph`、`GraphSpace`、型付き`EdgeFamily`、独自問題向けFrontier API、全matching構築を実装済みです。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
 
 対応targetは64-bit環境です。32-bit targetは現在サポートしていません。
 
@@ -34,22 +34,24 @@ assert!(!family.is_empty());
 # Ok::<(), zdd_family::Error>(())
 ```
 
-今後追加するGraph APIの利用イメージ:
+Graph APIの利用例:
 
-```rust,ignore
-// source等はgraphから取得したID。
+```rust
+use zdd_family::{Graph, GraphSpace};
+
+let graph = Graph::from_edges(4, [(0, 1), (1, 2), (2, 3)])?;
 let space = GraphSpace::new(&graph)?;
-let paths = space.paths(source, target)?;
+let matchings = space.matchings()?;
 
-println!("count = {}", paths.count());
+println!("count = {}", matchings.count());
 
-let filtered = paths
-    .cardinality().at_most(10)?
-    .filter_contains(required_edge)?;
+let pairs = matchings.cardinality().exactly(2)?;
 
-for solution in filtered.iter().take(20) {
+for solution in pairs.iter().take(20) {
     println!("{solution:?}");
 }
+
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ZDDが小さくても解数は非常に大きい場合があります。`family.count()`はZDD上のDPで計数しますが、`family.iter().count()`は全解を列挙します。圧縮率や性能は問題、変数順序、Frontier状態数に依存します。
