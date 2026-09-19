@@ -60,7 +60,11 @@ fn matchings_equal_an_independent_exhaustive_oracle_on_small_graphs() {
                 .filter_map(|(index, &edge)| (graph_mask & (1 << index) != 0).then_some(edge));
             let graph = Graph::from_edges(vertex_count, edges).unwrap();
             let actual = GraphSpace::new(&graph).unwrap().matchings().unwrap();
-            assert_eq!(solution_sets(&actual), matching_oracle(&graph));
+            assert_eq!(
+                solution_sets(&actual),
+                matching_oracle(&graph),
+                "vertex_count={vertex_count}, graph_mask={graph_mask}, edges={candidate_edges:?}"
+            );
         }
     }
 

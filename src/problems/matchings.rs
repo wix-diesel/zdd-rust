@@ -4,7 +4,7 @@ use crate::{Branch, Choice, EdgeStep, FrontierProblem, FrontierView, Graph};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct MatchingState {
-    matched_vertices: Vec<bool>,
+    matched_slots: Vec<bool>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -14,9 +14,9 @@ impl FrontierProblem for MatchingProblem {
     type State = MatchingState;
     type Error = Infallible;
 
-    fn initial_state(&self, graph: &Graph) -> Result<Self::State, Self::Error> {
+    fn initial_state(&self, _graph: &Graph) -> Result<Self::State, Self::Error> {
         Ok(MatchingState {
-            matched_vertices: vec![false; graph.vertex_count()],
+            matched_slots: Vec::new(),
         })
     }
 
@@ -26,22 +26,36 @@ impl FrontierProblem for MatchingProblem {
         step: &EdgeStep<'_>,
         choice: Choice,
     ) -> Result<Branch, Self::Error> {
-        if choice == Choice::Include {
-            let [first, second] = step.endpoints();
-            if state.matched_vertices[first.index()] || state.matched_vertices[second.index()] {
-                return Ok(Branch::Reject);
-            }
-            state.matched_vertices[first.index()] = true;
-            state.matched_vertices[second.index()] = true;
+        let slots = step.endpoint_slots();
+        let required_len = slots.iter().map(|slot| slot.index() + 1).max().unwrap_or(0);
+        if state.matched_slots.len() < required_len {
+            state.matched_slots.resize(required_len, false);
         }
 
-        for &vertex in step.forgotten() {
-            state.matched_vertices[vertex.index()] = false;
+        if choice == Choice::Include {
+            if state.matched_slots[slots[0].index()] || state.matched_slots[slots[1].index()] {
+                return Ok(Branch::Reject);
+            }
+            state.matched_slots[slots[0].index()] = true;
+            state.matched_slots[slots[1].index()] = true;
+        }
+
+        for (slot, remaining) in slots.into_iter().zip(step.remaining_incident_edges()) {
+            if remaining == 0 {
+                state.matched_slots[slot.index()] = false;
+            }
         }
         Ok(Branch::Keep)
     }
 
-    fn canonicalize(&self, _state: &mut Self::State, _next: &FrontierView<'_>) {}
+    fn canonicalize(&self, state: &mut Self::State, next: &FrontierView<'_>) {
+        let active_len = next
+            .iter()
+            .map(|(slot, _vertex)| slot.index() + 1)
+            .max()
+            .unwrap_or(0);
+        state.matched_slots.truncate(active_len);
+    }
 
     fn finalize(&self, _state: &Self::State) -> Result<bool, Self::Error> {
         Ok(true)
