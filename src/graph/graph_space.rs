@@ -110,6 +110,16 @@ impl GraphSpace {
         FrontierBuilder::new(self).build(crate::problems::MatchingProblem)
     }
 
+    /// Returns the family of all single simple cycles in this graph.
+    ///
+    /// Each cycle is represented by its edge set, so its orientation and
+    /// starting vertex do not create duplicate solutions. The empty edge set,
+    /// unions of multiple cycles, and cycles with additional components are
+    /// excluded. A graph with no cycle produces the empty family.
+    pub fn cycles(&self) -> Result<EdgeFamily, BuildError<Infallible>> {
+        FrontierBuilder::new(self).build(crate::problems::CycleProblem)
+    }
+
     /// Returns the family of all vertex-simple paths from `source` to `target`.
     ///
     /// Each path is represented by its edge set, so its orientation and
