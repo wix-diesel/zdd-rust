@@ -16,9 +16,9 @@ mod zdd;
 mod test_support;
 
 pub use family::{
-    CardinalityFilter, CountError, CountIndex, Error, FamilySpace, FamilySpaceBuilder, LimitKind,
-    Limits, OperationReport, OperationStats, QueryError, QueryLimits, QueryStats, SetFamily,
-    Solution, SolutionIterator, SpaceStats, VariableId,
+    CancellationToken, CardinalityFilter, CountError, CountIndex, Error, FamilySpace,
+    FamilySpaceBuilder, LimitKind, Limits, OperationReport, OperationStats, QueryError,
+    QueryLimits, QueryStats, SetFamily, Solution, SolutionIterator, SpaceStats, VariableId,
 };
 pub use num_bigint::BigUint;
 
@@ -29,7 +29,10 @@ pub use graph::{
 };
 
 #[cfg(feature = "graph")]
-pub use frontier::{EdgeStep, FrontierPlan, FrontierSlot};
+pub use frontier::{
+    Branch, BuildError, BuildReport, BuildStats, Choice, EdgeStep, FrontierBuilder, FrontierPlan,
+    FrontierProblem, FrontierSlot, FrontierView,
+};
 #[cfg(feature = "graph")]
 mod frontier;
 #[cfg(feature = "graph")]

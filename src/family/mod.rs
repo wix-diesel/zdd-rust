@@ -23,8 +23,8 @@ mod solution_iterator;
 mod space;
 
 pub use api_types::{
-    CountError, Error, LimitKind, Limits, OperationReport, OperationStats, QueryError, QueryLimits,
-    QueryStats, SpaceStats, VariableId,
+    CancellationToken, CountError, Error, LimitKind, Limits, OperationReport, OperationStats,
+    QueryError, QueryLimits, QueryStats, SpaceStats, VariableId,
 };
 
 struct SpaceInner {

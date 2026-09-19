@@ -16,7 +16,7 @@
 | `GraphSpace` | GraphをFamilySpaceへ結び付ける高水準入口 |
 | `EdgeFamily`, `EdgeSolution` | 元Graphの対応を持つFamilyと所有されたEdgeId列 |
 | `FrontierPlan`, `EdgeStep`, `FrontierSlot` | 固定辺順のintroduce/forget scheduleと、`O(w)`作業frontier用の安定slot |
-| `FrontierBuilder`, `FrontierProblem` | 独自問題の入口 |
+| `FrontierBuilder`, `FrontierProblem`, `Choice`, `Branch` | 独自問題の入口と辺ごとのExclude/Include、Keep/Reject |
 | `Limits`, `QueryLimits` | space/操作とqueryの有限な既定上限 |
 | `SpaceStats`, `OperationStats`, `BuildStats`, `QueryStats` | manager全体と一操作の統計。ノード数と解数を区別 |
 | `CancellationToken` | clone可能な協調キャンセルhandle |
@@ -193,6 +193,8 @@ let family = FrontierBuilder::new(&space)
 
 ここでspaceはGraphSpace。結果はそのspace内のEdgeFamilyとなる。ユーザーStateはNodeIdを返さず、transitionと受理条件を実装する。trait案は[Frontier設計](frontier.md#4-trait案)を参照。
 
+`build_with_stats`は`BuildReport<EdgeFamily>`を返す。`BuildStats::transition_tape_entries`は完了したbranch記録数を表し、State本体を当層・次層だけに限定しても全層分のtapeが後ろ向き構築まで保持されることを明示する。`Limits::max_frontier_transitions`はtapeへ記録されるbranchを生むユーザーtransitionの試行にも同時に上限を与える。
+
 high-levelのpaths等も同じ構築器を使う。low-level APIを使った場合だけFamily queryが利用できなくなる構成にしない。
 
 ## 8. Importとcompaction
@@ -235,7 +237,7 @@ space作成時、固定node capacityへ変換できない値と、universe初期
 
 - `FamilySpace::stats() -> SpaceStats`は呼び出し時点のmanager全体のsnapshotを返す。少なくとも`live_nodes`、`peak_live_nodes`、`nodes_created`、shared-cacheのentry/hit/miss/eviction、GC回数を持つ。並行操作中の複数fieldを一つのtransaction時点として読むことは保証しない。
 - `OperationStats`は`nodes_before/after/created`、operation memoのpeak/hit、cache hit/miss、cancel check数を持つ。
-- `BuildStats`は`OperationStats`に、処理済み層、現在/peak State、試行transition、reject、mergeを加える。
+- `BuildStats`は`OperationStats`に、処理済み層、現在/peak State、試行transition、全層transition tape entry、reject、mergeを加える。
 - `QueryStats`は到達/snapshot node、部分解数の合計bit数と最大bit数を持つ。
 
 通常の利便メソッドは成功値だけを返す。成功時の一操作統計が必要な場合は同名の`*_with_stats`入口を使い、`value`とstatsを持つreportを受け取る。資源超過、キャンセル、ユーザー問題による失敗は、失敗直前までの対応するstatsを必ずerrorに含む。統計は診断用であり、backend変更後もfieldの意味は維持するが、cache hit数やGC時期の完全再現性は保証しない。

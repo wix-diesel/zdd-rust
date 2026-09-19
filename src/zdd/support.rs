@@ -95,7 +95,7 @@ impl ZddManager {
         }
     }
 
-    pub(super) fn make_node(
+    pub(crate) fn make_node(
         &self,
         variable: u32,
         hi: &Root,

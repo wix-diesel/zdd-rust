@@ -60,6 +60,27 @@ impl FamilySpace {
         }
     }
 
+    #[cfg(feature = "graph")]
+    pub(crate) fn limits(&self) -> &Limits {
+        &self.inner.limits
+    }
+
+    #[cfg(feature = "graph")]
+    pub(crate) fn make_decision_node(
+        &self,
+        variable: VariableId,
+        hi: &SetFamily,
+        lo: &SetFamily,
+    ) -> Result<(SetFamily, bool), ()> {
+        debug_assert!(Arc::ptr_eq(&self.inner, &hi.space));
+        debug_assert!(Arc::ptr_eq(&self.inner, &lo.space));
+        let (root, created) = self
+            .inner
+            .manager
+            .make_node(variable.0, &hi.root, &lo.root)?;
+        Ok((self.family(root), created))
+    }
+
     /// Builds a family from explicit sets.
     ///
     /// Element order, duplicate elements, and duplicate sets are normalized.

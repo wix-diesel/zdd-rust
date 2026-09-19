@@ -1,5 +1,7 @@
 use super::*;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 /// An element identifier in a [`FamilySpace`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VariableId(pub(super) u32);
@@ -69,10 +71,41 @@ pub enum LimitKind {
     Node,
     /// Distinct keys retained by one operation-local memo table.
     OperationMemo,
+    /// Distinct canonical states retained in one frontier layer.
+    FrontierStates,
+    /// Include/exclude transitions attempted by one frontier build.
+    FrontierTransitions,
     /// Distinct nonterminal nodes copied into a query-local DAG.
     QueryNodes,
     /// Logical bits in all exact partial counts retained by a query.
     CountBits,
+}
+
+/// A cloneable handle for cooperative cancellation of bounded operations.
+///
+/// Cancellation is monotonic: after [`Self::cancel`] is called, every clone
+/// remains cancelled. Operations observe cancellation between work units; the
+/// handle does not interrupt a user callback that is already running.
+#[derive(Clone, Debug, Default)]
+pub struct CancellationToken(Arc<AtomicBool>);
+
+impl CancellationToken {
+    /// Creates a token in the non-cancelled state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Requests cancellation for every clone of this token.
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    /// Returns whether cancellation has been requested.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
 }
 
 /// Statistics collected while constructing a [`CountIndex`].
