@@ -49,6 +49,12 @@ pub enum GraphError {
         /// The input position of the duplicate occurrence.
         duplicate_index: usize,
     },
+    /// The two endpoints of a requested path are identical.
+    #[non_exhaustive]
+    IdenticalPathEndpoints {
+        /// The repeated endpoint.
+        vertex: usize,
+    },
     /// An edge order does not contain exactly one entry per graph edge.
     #[non_exhaustive]
     InvalidEdgeOrderLength {
@@ -106,6 +112,12 @@ impl fmt::Display for GraphError {
                 formatter,
                 "edge {duplicate_index} duplicates undirected edge {first_index}"
             ),
+            Self::IdenticalPathEndpoints { vertex } => {
+                write!(
+                    formatter,
+                    "path endpoints must differ, but both are vertex {vertex}"
+                )
+            }
             Self::InvalidEdgeOrderLength { expected, actual } => write!(
                 formatter,
                 "edge order has {actual} entries but the graph has {expected} edges"
