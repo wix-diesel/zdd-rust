@@ -1,6 +1,7 @@
+use std::convert::Infallible;
 use std::sync::Arc;
 
-use crate::{FamilySpace, Limits, SetFamily, SpaceStats, VariableId};
+use crate::{BuildError, FamilySpace, FrontierBuilder, Limits, SetFamily, SpaceStats, VariableId};
 
 use super::{EdgeFamily, EdgeId, EdgeOrder, EdgeOrdering, Graph, GraphError, InputOrder};
 
@@ -97,6 +98,16 @@ impl GraphSpace {
     /// Returns the family containing every subset of graph edges.
     pub fn powerset(&self) -> Result<EdgeFamily, GraphError> {
         Ok(self.family(self.inner.family_space.powerset()?))
+    }
+
+    /// Returns the family of all matchings in this graph.
+    ///
+    /// A matching contains no two edges with a shared endpoint. The empty
+    /// matching is always included, including for graphs with no edges or
+    /// only isolated vertices. This method returns all matchings, not only
+    /// maximal or maximum-cardinality matchings.
+    pub fn matchings(&self) -> Result<EdgeFamily, BuildError<Infallible>> {
+        FrontierBuilder::new(self).build(crate::problems::MatchingProblem)
     }
 
     /// Builds an edge family from explicit edge sets.

@@ -177,6 +177,8 @@ for edges in short.iter().take(10) {
 | `space.matchings()` | 空解を含む全matching |
 | `family.as_set_family()` | 対応するgraph非依存Familyへの読み取り参照 |
 
+`matchings()`は共有端点を持つ二辺を同時に含まないすべての辺集合を返す。最大matchingや極大matchingだけへ限定せず、0辺Graphや孤立頂点だけのGraphでも空matching一つを返す。結果は同じ`GraphSpace`の`EdgeFamily`なので、cardinality filterや他のFamilyとの集合演算をそのまま適用できる。
+
 EdgeFamilyはFamilyと同じ演算・query名を持ち、要素引数をEdgeId、列挙結果をEdgeSolutionへ変換する。対応するGraphと変数/辺のmappingを所有する。低水準FamilyからEdgeFamilyへ無検証でwrapするAPIは提供しない。
 
 GraphSpaceのcloneは同じspaceを共有する。同じGraphから`GraphSpace::new`を二回呼ぶと二つの独立spaceになる。単にGraphが同じだけで二項演算を自動importしない。複数の組み込み問題を合成する場合は同じGraphSpaceを再利用する。
