@@ -9,6 +9,10 @@ use crate::{EdgeId, GraphError, GraphSpace, VariableId, VertexId};
 pub struct FrontierSlot(u32);
 
 impl FrontierSlot {
+    pub(crate) fn from_index(index: usize) -> Self {
+        Self(index as u32)
+    }
+
     /// Returns the zero-based slot index.
     #[must_use]
     pub fn index(self) -> usize {

@@ -118,7 +118,7 @@ impl GraphSpace {
         Ok(self.family(self.inner.family_space.from_sets(variable_sets)?))
     }
 
-    fn family(&self, family: SetFamily) -> EdgeFamily {
+    pub(crate) fn family(&self, family: SetFamily) -> EdgeFamily {
         EdgeFamily {
             context: Arc::clone(&self.inner),
             family,

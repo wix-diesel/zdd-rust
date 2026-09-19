@@ -67,7 +67,7 @@ P0のbackend評価コードは[専用ハーネス](../tools/backend-evaluation/R
 | OPEN-05 | computed cache置換・初期容量 | operation memoを保護し、shared cacheをboundedにする | P1/P2 |
 | OPEN-06 | CountIndex配置 | **解決（2026-09-17）**: Family query層がlocal DAG snapshot・変数mapping・枝別BigUint countを所有する。`QueryStats`でsnapshot node数とcount bit数を分離して測定し、明示的な再利用でsampling/rankの前処理を償却する。manager global cacheには保持しない | P2終了 |
 | OPEN-07 | BFS辺出力規則 | **解決（2026-09-17）**: 最小未訪問VertexIdから成分を開始し、頂点はFIFO、incident edgeは入力EdgeId順、辺は最初の遭遇時に出力する。孤立頂点は出力なし。[Frontier設計](frontier.md#10-ordering拡張) | P3終了 |
-| OPEN-08 | Frontier Stateのbuffer方式 | owned State baseline。allocation profileで判断 | P3 |
+| OPEN-08 | Frontier Stateのbuffer方式 | **解決（2026-09-19）**: owned Stateをbaselineとし、Reject/merge後の作業bufferへ`clone_from`して再利用。新規canonical Stateは次層表へmoveする | P3終了 |
 | OPEN-09 | crate名の登録状況 | zdd-familyを希望。未登録という主張はまだしない | 公開前 |
 | OPEN-10 | MSRV・依存version | 必要機能と全default依存のMSRVから最小stableを選択 | 最初のリリース前 |
 | OPEN-11 | error enumと統計型の詳細 | **解決（2026-09-12）**: public errorはnon_exhaustive、`Problem(E)`は元値を保持、limit/cancel/Problemは途中statsを保持。解なしは成功値。[エラー契約](api.md#10-エラーの分類) | P0終了 |

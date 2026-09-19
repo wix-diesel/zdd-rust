@@ -89,6 +89,8 @@ forgetを頂点単位のtrait callbackへ分離しない。同時に消える複
 
 Clone boundはundo logをユーザーに要求しないための初期選択。hot pathではclone_from等で作業bufferを再利用する。ただし、保存される新規Stateのowned bufferには領域が必要であり、すべてのclone/allocationをゼロにできるとは約束しない。
 
+構築器はRejectまたは既存canonical Stateへのmergeで所有権を回収できた作業Stateを次branchの`clone_from`先として再利用する。新規canonical Stateは次層表へ所有権を移すため、その直後のbranchでは新しいowned Stateが必要になる。この方式をOPEN-08のv1 baselineとする。
+
 ## 5. 一分岐の処理順序
 
 1. 保存済みの不変Stateから作業Stateを作る。
@@ -160,6 +162,8 @@ v1.xのspanning treeでは全頂点を対象にするため、次数0の頂点�
 `O(max_i(S_i + S_(i+1)) * B) + O(sum_i S_i * A) + ZDD領域`
 
 State本体を二層に限定しても、後ろ向き構築用の遷移記録は全層分必要。縮約後ZDDが小さいことだけではピークメモリは決まらない。State、遷移記録、結果ノード、Unique Tableを分けて統計と上限を管理する。
+
+公開統計では試行したbranch数と保持した`transition_tape_entries`を分ける。正常完了時は一致するが、ユーザーErrorやキャンセルでは、呼び出し済みでも記録を完了していないtransitionがあり得る。`max_frontier_transitions`はユーザーtransition呼び出し直前に判定するため、Reject、merge、Problem errorへ至る試行も資源上限に含む。
 
 枝刈りは不可能性を証明できる条件に限る。次数上限超過、残りincident edge数からの次数不足、閉じた不適格成分など。任意の時間打ち切りで部分Familyを完全解集合として返さない。
 
