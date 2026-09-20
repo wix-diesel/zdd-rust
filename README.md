@@ -4,7 +4,7 @@
 
 Frontier-based Searchを、グラフの解集合を効率よく構築する中核機能として提供します。構築後は同じSet Family APIで条件を追加し、集合族を再利用できることを目指します。将来は加法重みによる最適化、rank/unrank、weighted samplingへ拡張します。
 
-現在はグラフに依存しない`FamilySpace`の集合演算・queryに加え、immutableな`Graph`、`GraphSpace`、型付き`EdgeFamily`、独自問題向けFrontier API、全matching構築を実装済みです。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
+現在はグラフに依存しない`FamilySpace`の集合演算・query、optionalな厳密一様samplingに加え、immutableな`Graph`、`GraphSpace`、型付き`EdgeFamily`、独自問題向けFrontier API、全matching構築を実装済みです。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
 
 対応targetは64-bit環境です。32-bit targetは現在サポートしていません。
 
@@ -74,7 +74,7 @@ ZDDが小さくても解数は非常に大きい場合があります。`family.
 
 ## v1の範囲
 
-ZDD core、基本集合演算、要素・包含・cardinalityフィルタ、厳密count、lazy iterator、Frontier framework、s-t単純路、単一単純閉路、matchingを対象とします。一様samplingはoptional featureの予定です。
+ZDD core、基本集合演算、要素・包含・cardinalityフィルタ、厳密count、lazy iterator、Frontier framework、s-t単純路、単一単純閉路、matchingを対象とします。一様samplingはoptionalな`sampling` featureで提供します。
 
 加法重みのmin/max、rank/unrank、spanning tree・forest、安定した保存形式はv1.xへ、高度な並列化、dynamic reordering、top-k、汎用semiringはさらに将来へ分けます。詳細は[スコープ](docs/specification.md#2-スコープ)を参照してください。
 

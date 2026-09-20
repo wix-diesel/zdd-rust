@@ -3,6 +3,11 @@ use std::sync::Arc;
 
 use crate::{BigUint, CountError, CountIndex, OperationReport, QueryError, QueryLimits, SetFamily};
 
+#[cfg(feature = "sampling")]
+use rand_core::RngCore;
+
+#[cfg(feature = "sampling")]
+use super::EdgeSolution;
 use super::graph_space::GraphSpaceInner;
 use super::{EdgeId, EdgeSolutionIterator, Graph, GraphError};
 
@@ -40,6 +45,23 @@ impl EdgeFamily {
     /// Builds a reusable exact-count index under explicit query limits.
     pub fn count_index(&self, limits: &QueryLimits) -> Result<CountIndex, QueryError> {
         self.family.count_index(limits)
+    }
+
+    /// Samples one edge set uniformly using a caller-provided random number generator.
+    ///
+    /// This builds a fresh count index on every call. For repeated sampling,
+    /// reuse [`Self::count_index`] and map the returned variable identifiers
+    /// through the graph space. No manager guard is held while `rng` is called.
+    #[cfg(feature = "sampling")]
+    pub fn sample<R: RngCore>(&self, rng: &mut R) -> Result<Option<EdgeSolution>, QueryError> {
+        let Some(solution) = self.family.sample(rng)? else {
+            return Ok(None);
+        };
+        let edges = solution
+            .into_iter()
+            .map(|variable| self.context.variable_to_edge[variable.index()])
+            .collect();
+        Ok(Some(EdgeSolution::new(edges)))
     }
 
     /// Lazily enumerates edge sets in fixed variable order.

@@ -141,7 +141,11 @@ cardinalityは各解の要素数。すべて新Familyを返す。`CardinalityFil
 | `family.sample(&mut rng)` | sampling feature。`Result<Option<Solution>, QueryError>` |
 | `index.sample(&mut rng)` | 同じcount indexを再利用。`Result<Option<Solution>, QueryError>` |
 
-RNGは選定したrand系versionのRngCore等に相当するtraitをgenericに受け取る。公開boundの正確なversionは依存決定時に確定。global RNGを作らない。
+RNGは`rand_core` 0.9の`RngCore`をgenericに受け取る。global RNGを作らない。
+
+実装は`count - 1`のbit長だけを外部RNGから取得し、範囲外値をrejection samplingで
+捨てる。moduloや浮動小数点分岐は使わず、`u128`を超える解数でも`BigUint` rankを
+枝別countに従って復元する。`EdgeFamily::sample`は同じ処理の結果を元の`EdgeId`へ戻す。
 
 sampleの利便APIは必要に応じてCountIndexを作るため、毎回呼ぶと前処理を繰り返す。多数回利用ではindexを明示的に作る。indexは自分の対象Family以外へ使い回さない。
 

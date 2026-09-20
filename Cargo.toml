@@ -14,11 +14,12 @@ categories = ["data-structures", "mathematics"]
 default = ["graph"]
 # Graph data and typed edge-family APIs. Frontier APIs are added separately.
 graph = []
-# Sampling will remain opt-in until its API is implemented.
-sampling = []
+# Exact uniform sampling with caller-provided random number generators.
+sampling = ["dep:rand_core"]
 
 [dependencies]
 num-bigint = { version = "0.4.6", default-features = false, features = ["std"] }
+rand_core = { version = "0.9.5", default-features = false, optional = true }
 # Keep the backend private so the public API can remain backend-independent.
 # See docs/dependencies.md for the version, MSRV, and license rationale.
 oxidd = { version = "0.12.0", git = "https://github.com/OxiDD/oxidd.git", rev = "be2f69bd704a4b9baf993fe54ff92c7ca17bb177", default-features = false, features = ["manager-index", "zbdd"] }
