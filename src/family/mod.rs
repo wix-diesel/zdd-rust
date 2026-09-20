@@ -10,12 +10,13 @@ use num_bigint::BigUint;
 
 use crate::zdd::{
     ApplyError, ApplyOp, ApplyStats, CreateError, FilterSpec, QUERY_ONE, QUERY_ZERO, QueryDag,
-    Root, ZddManager,
+    Root, TransferDag, ZddManager,
 };
 
 mod api_types;
 mod cardinality_filter;
 mod count_index;
+mod import;
 #[cfg(feature = "sampling")]
 mod sampling;
 mod set_family;

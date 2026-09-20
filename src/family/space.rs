@@ -131,7 +131,7 @@ impl FamilySpace {
         Ok(self.family(root))
     }
 
-    fn family(&self, root: Root) -> SetFamily {
+    pub(super) fn family(&self, root: Root) -> SetFamily {
         SetFamily {
             space: Arc::clone(&self.inner),
             root,

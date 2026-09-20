@@ -14,6 +14,7 @@ use oxidd::{
 mod apply;
 mod construction;
 mod filter;
+mod import;
 mod query;
 mod snapshot;
 mod support;
@@ -87,6 +88,11 @@ pub(crate) struct QueryNode {
 #[derive(Clone, Debug)]
 pub(crate) struct QueryDag {
     pub(crate) root: usize,
+    pub(crate) nodes: Vec<QueryNode>,
+}
+
+pub(crate) struct TransferDag {
+    pub(crate) roots: Vec<usize>,
     pub(crate) nodes: Vec<QueryNode>,
 }
 

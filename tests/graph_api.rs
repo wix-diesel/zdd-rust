@@ -192,3 +192,56 @@ fn zero_edge_graph_and_foreign_out_of_range_edge_are_handled() {
         Err(GraphError::InvalidEdge { .. })
     ));
 }
+
+#[test]
+fn graph_compaction_preserves_graph_order_edge_ids_and_input_order() {
+    let graph = Graph::from_edges(4, [(0, 1), (1, 2), (2, 3)]).unwrap();
+    let edge0 = graph.edge_id(0).unwrap();
+    let edge1 = graph.edge_id(1).unwrap();
+    let edge2 = graph.edge_id(2).unwrap();
+    let order = EdgeOrder::new(&graph, [edge2, edge0, edge1]).unwrap();
+    let space = GraphSpace::builder(&graph).ordering(order).build().unwrap();
+    let first = space
+        .from_edge_sets([vec![edge2], vec![edge0, edge1]])
+        .unwrap();
+    let second = space
+        .from_edge_sets([vec![edge2, edge0], vec![edge1]])
+        .unwrap();
+    let expected_first = first.iter().collect::<Vec<_>>();
+    let expected_second = second.iter().collect::<Vec<_>>();
+
+    let (compacted_space, compacted) = space.compact(&[first.clone(), second.clone()]).unwrap();
+
+    assert_eq!(compacted[0].iter().collect::<Vec<_>>(), expected_first);
+    assert_eq!(compacted[1].iter().collect::<Vec<_>>(), expected_second);
+    assert_eq!(first.iter().collect::<Vec<_>>(), expected_first);
+    assert_eq!(compacted_space.variable_for_edge(edge2).unwrap().index(), 0);
+    assert_eq!(compacted_space.variable_for_edge(edge0).unwrap().index(), 1);
+
+    let foreign = GraphSpace::new(&graph).unwrap().unit();
+    assert!(matches!(
+        space.compact(&[first, foreign]),
+        Err(GraphError::ContextMismatch { .. })
+    ));
+}
+
+#[test]
+fn graph_compaction_accepts_an_empty_root_list() {
+    let graph = Graph::from_edges(3, [(0, 1), (1, 2)]).unwrap();
+    let edge0 = graph.edge_id(0).unwrap();
+    let edge1 = graph.edge_id(1).unwrap();
+    let order = EdgeOrder::new(&graph, [edge1, edge0]).unwrap();
+    let source = GraphSpace::builder(&graph).ordering(order).build().unwrap();
+
+    let (destination, compacted) = source.compact(&[]).unwrap();
+
+    assert!(compacted.is_empty());
+    assert_eq!(destination.graph().vertex_count(), 3);
+    assert_eq!(destination.graph().edge_count(), 2);
+    assert_eq!(destination.variable_for_edge(edge1).unwrap().index(), 0);
+    assert_eq!(destination.variable_for_edge(edge0).unwrap().index(), 1);
+    assert!(matches!(
+        source.unit().union(&destination.unit()),
+        Err(GraphError::ContextMismatch { .. })
+    ));
+}
