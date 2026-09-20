@@ -316,6 +316,20 @@ fn multi_root_compaction_preserves_order_sharing_and_old_roots() {
 }
 
 #[test]
+fn compaction_accepts_an_empty_root_list() {
+    let source = FamilySpace::new(3).unwrap();
+
+    let (destination, compacted) = source.compact(&[]).unwrap();
+
+    assert!(compacted.is_empty());
+    assert_eq!(destination.stats().live_nodes, source.stats().live_nodes);
+    assert!(matches!(
+        source.unit().union(&destination.unit()),
+        Err(Error::ContextMismatch { .. })
+    ));
+}
+
+#[test]
 fn failed_import_keeps_the_source_valid_and_deep_compaction_is_iterative() {
     let source = FamilySpace::new(3).unwrap();
     let vars = variables(&source, 3);

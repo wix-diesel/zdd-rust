@@ -224,3 +224,24 @@ fn graph_compaction_preserves_graph_order_edge_ids_and_input_order() {
         Err(GraphError::ContextMismatch { .. })
     ));
 }
+
+#[test]
+fn graph_compaction_accepts_an_empty_root_list() {
+    let graph = Graph::from_edges(3, [(0, 1), (1, 2)]).unwrap();
+    let edge0 = graph.edge_id(0).unwrap();
+    let edge1 = graph.edge_id(1).unwrap();
+    let order = EdgeOrder::new(&graph, [edge1, edge0]).unwrap();
+    let source = GraphSpace::builder(&graph).ordering(order).build().unwrap();
+
+    let (destination, compacted) = source.compact(&[]).unwrap();
+
+    assert!(compacted.is_empty());
+    assert_eq!(destination.graph().vertex_count(), 3);
+    assert_eq!(destination.graph().edge_count(), 2);
+    assert_eq!(destination.variable_for_edge(edge1).unwrap().index(), 0);
+    assert_eq!(destination.variable_for_edge(edge0).unwrap().index(), 1);
+    assert!(matches!(
+        source.unit().union(&destination.unit()),
+        Err(GraphError::ContextMismatch { .. })
+    ));
+}
