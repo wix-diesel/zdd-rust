@@ -550,6 +550,7 @@ dependencies = [
  "num-bigint",
  "oxidd",
  "proptest",
+ "rand_core",
 ]
 
 [[package]]

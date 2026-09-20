@@ -54,6 +54,8 @@ jobs:
         include:
           - { os: ubuntu-latest, toolchain: stable, feature_set: default, cargo_args: "" }
           - { os: ubuntu-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
+          - { os: ubuntu-latest, toolchain: stable, feature_set: all-features, cargo_args: --all-features }
+          - { os: ubuntu-latest, toolchain: stable, feature_set: sampling-only, cargo_args: --no-default-features --features sampling }
           - { os: macos-latest, toolchain: stable, feature_set: default, cargo_args: "" }
           - { os: macos-latest, toolchain: stable, feature_set: no-default-features, cargo_args: --no-default-features }
           - { os: windows-latest, toolchain: stable, feature_set: default, cargo_args: "" }

@@ -16,6 +16,8 @@ use crate::zdd::{
 mod api_types;
 mod cardinality_filter;
 mod count_index;
+#[cfg(feature = "sampling")]
+mod sampling;
 mod set_family;
 mod set_operations;
 mod solution;

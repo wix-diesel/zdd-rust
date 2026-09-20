@@ -12,6 +12,10 @@ Rust 1.98とする。MSRVを上げる場合は、依存関係を含む根拠を�
 MIT/Apache-2.0で、MSRV・ライセンス方針を満たすためである。部分解数はqueryごとに所有し、
 managerの無制限なglobal cacheには保存しない。
 
+`sampling` featureは、呼び出し側が所有するRNGをgenericに受け取るため、`rand_core`
+0.9系をoptional dependencyとして使用する。default featureは無効にし、OS RNGやglobal RNGを
+crate内部で生成しない。`RngCore`呼び出しはmanager guardを解放したlocal `CountIndex`上で行う。
+
 ## 初期backend
 
 `oxidd`は公開APIに現れないprivate dependencyとして、確認済みのOxiDD 0.12.0の
