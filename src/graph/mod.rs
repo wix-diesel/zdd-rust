@@ -1,5 +1,6 @@
 //! Immutable graph data and typed edge-family APIs.
 
+mod compaction;
 mod edge_family;
 mod edge_solution;
 mod error;

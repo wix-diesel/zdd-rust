@@ -255,6 +255,45 @@ pub enum Error {
         /// The number of variables in the destination universe.
         variable_count: usize,
     },
+    /// Source and destination universes have different sizes.
+    #[non_exhaustive]
+    UniverseSizeMismatch {
+        /// Number of variables in the source universe.
+        source: usize,
+        /// Number of variables in the destination universe.
+        destination: usize,
+    },
+    /// A variable map does not cover the complete source universe.
+    #[non_exhaustive]
+    InvalidVariableMapLength {
+        /// Required number of source entries.
+        expected: usize,
+        /// Number of entries that were supplied.
+        actual: usize,
+    },
+    /// A mapped destination variable is outside the destination universe.
+    #[non_exhaustive]
+    InvalidMappedVariable {
+        /// Source variable position whose mapping was rejected.
+        source_index: usize,
+        /// Rejected destination variable position.
+        destination_index: usize,
+        /// Number of variables in the destination universe.
+        destination_variable_count: usize,
+    },
+    /// Two source variables map to the same destination variable.
+    #[non_exhaustive]
+    DuplicateMappedVariable {
+        /// Duplicated destination variable position.
+        destination_index: usize,
+        /// First source position mapped there.
+        first_source_index: usize,
+        /// Later source position mapped there.
+        duplicate_source_index: usize,
+    },
+    /// A variable map does not preserve the fixed variable order.
+    #[non_exhaustive]
+    OrderMismatch {},
     /// A closed cardinality range has its lower endpoint above its upper endpoint.
     #[non_exhaustive]
     InvalidRange {
@@ -292,6 +331,36 @@ impl fmt::Display for Error {
                 formatter,
                 "element index {index} is outside a universe of {variable_count} variables"
             ),
+            Self::UniverseSizeMismatch {
+                source,
+                destination,
+            } => write!(
+                formatter,
+                "source universe has {source} variables but destination has {destination}"
+            ),
+            Self::InvalidVariableMapLength { expected, actual } => write!(
+                formatter,
+                "variable map has {actual} entries but the source universe has {expected} variables"
+            ),
+            Self::InvalidMappedVariable {
+                source_index,
+                destination_index,
+                destination_variable_count,
+            } => write!(
+                formatter,
+                "source variable {source_index} maps to destination variable {destination_index}, outside a universe of {destination_variable_count} variables"
+            ),
+            Self::DuplicateMappedVariable {
+                destination_index,
+                first_source_index,
+                duplicate_source_index,
+            } => write!(
+                formatter,
+                "source variables {first_source_index} and {duplicate_source_index} both map to destination variable {destination_index}"
+            ),
+            Self::OrderMismatch {} => {
+                formatter.write_str("variable map does not preserve variable order")
+            }
             Self::InvalidRange { start, end } => {
                 write!(formatter, "invalid closed range {start}..={end}")
             }

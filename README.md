@@ -4,7 +4,7 @@
 
 Frontier-based Searchを、グラフの解集合を効率よく構築する中核機能として提供します。構築後は同じSet Family APIで条件を追加し、集合族を再利用できることを目指します。将来は加法重みによる最適化、rank/unrank、weighted samplingへ拡張します。
 
-現在はグラフに依存しない`FamilySpace`の集合演算・query、optionalな厳密一様samplingに加え、immutableな`Graph`、`GraphSpace`、型付き`EdgeFamily`、独自問題向けFrontier API、全matching構築を実装済みです。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
+現在はグラフに依存しない`FamilySpace`の集合演算・query、明示import・複数root compaction、optionalな厳密一様samplingに加え、immutableな`Graph`、`GraphSpace`、型付き`EdgeFamily`、独自問題向けFrontier API、全matching構築を実装済みです。公開crate名は`zdd-family`、Rustでのimport名は`zdd_family`です。crate名の登録状況は公開前に確認します。
 
 対応targetは64-bit環境です。32-bit targetは現在サポートしていません。
 

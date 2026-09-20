@@ -213,3 +213,133 @@ fn query_limits_and_fixed_width_overflow_are_reported() {
         }
     ));
 }
+
+#[test]
+fn explicit_import_preserves_values_counts_and_enumeration_order() {
+    let source = FamilySpace::new(3).unwrap();
+    let source_variables = variables(&source, 3);
+    let family = source
+        .from_sets([
+            vec![],
+            vec![source_variables[0]],
+            vec![source_variables[0], source_variables[2]],
+            vec![source_variables[1]],
+        ])
+        .unwrap();
+    let destination = FamilySpace::new(3).unwrap();
+    let variable_map = variables(&destination, 3);
+
+    let imported = destination.import(&family, &variable_map).unwrap();
+
+    assert_eq!(imported.count(), family.count());
+    assert_eq!(set_masks(&imported), set_masks(&family));
+    assert_eq!(
+        imported.iter().collect::<Vec<_>>(),
+        family.iter().collect::<Vec<_>>()
+    );
+    assert!(matches!(
+        imported.union(&family),
+        Err(Error::ContextMismatch { .. })
+    ));
+
+    for family_mask in 0u64..256 {
+        let source_family = family_from_mask(&source, &source_variables, family_mask);
+        let imported = destination.import(&source_family, &variable_map).unwrap();
+        assert_eq!(
+            imported.iter().collect::<Vec<_>>(),
+            source_family.iter().collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn explicit_import_validates_the_complete_bijective_ordered_map() {
+    let source = FamilySpace::new(3).unwrap();
+    let family = source.unit();
+    let destination = FamilySpace::new(3).unwrap();
+    let vars = variables(&destination, 3);
+
+    assert!(matches!(
+        destination.import(&family, &vars[..2]),
+        Err(Error::InvalidVariableMapLength { .. })
+    ));
+    let larger = FamilySpace::new(4).unwrap();
+    assert!(matches!(
+        destination.import(&family, &[vars[0], vars[1], larger.variable(3).unwrap()]),
+        Err(Error::InvalidMappedVariable { .. })
+    ));
+    assert!(matches!(
+        destination.import(&family, &[vars[0], vars[0], vars[2]]),
+        Err(Error::DuplicateMappedVariable { .. })
+    ));
+    assert!(matches!(
+        destination.import(&family, &[vars[1], vars[0], vars[2]]),
+        Err(Error::OrderMismatch { .. })
+    ));
+    let different_size = FamilySpace::new(2).unwrap();
+    assert!(matches!(
+        different_size.import(&family, &variables(&different_size, 2)),
+        Err(Error::UniverseSizeMismatch { .. })
+    ));
+}
+
+#[test]
+fn multi_root_compaction_preserves_order_sharing_and_old_roots() {
+    let space = FamilySpace::new(4).unwrap();
+    let vars = variables(&space, 4);
+    let left = space
+        .from_sets([vec![vars[0], vars[2]], vec![vars[0], vars[2], vars[3]]])
+        .unwrap();
+    let right = space
+        .from_sets([vec![vars[1], vars[2]], vec![vars[1], vars[2], vars[3]]])
+        .unwrap();
+    let expected_left = set_masks(&left);
+    let expected_right = set_masks(&right);
+
+    let (compacted_space, compacted) = space.compact(&[left.clone(), right.clone()]).unwrap();
+    assert_eq!(set_masks(&compacted[0]), expected_left);
+    assert_eq!(set_masks(&compacted[1]), expected_right);
+    assert_eq!(set_masks(&left), expected_left);
+    assert_eq!(set_masks(&right), expected_right);
+
+    let baseline = FamilySpace::new(4).unwrap().stats().live_nodes;
+    let combined_extra = compacted_space.stats().live_nodes - baseline;
+    let first_destination = FamilySpace::new(4).unwrap();
+    let first_map = variables(&first_destination, 4);
+    first_destination.import(&left, &first_map).unwrap();
+    let second_destination = FamilySpace::new(4).unwrap();
+    let second_map = variables(&second_destination, 4);
+    second_destination.import(&right, &second_map).unwrap();
+    let separate_extra = (first_destination.stats().live_nodes - baseline)
+        + (second_destination.stats().live_nodes - baseline);
+    assert!(combined_extra < separate_extra);
+}
+
+#[test]
+fn failed_import_keeps_the_source_valid_and_deep_compaction_is_iterative() {
+    let source = FamilySpace::new(3).unwrap();
+    let vars = variables(&source, 3);
+    let family = source.from_sets([vec![vars[0], vars[2]]]).unwrap();
+    let expected = set_masks(&family);
+    let constrained = FamilySpace::builder(3)
+        .limits(Limits {
+            max_live_nodes: 6,
+            ..Limits::default()
+        })
+        .build()
+        .unwrap();
+    let map = variables(&constrained, 3);
+    assert!(matches!(
+        constrained.import(&family, &map),
+        Err(Error::LimitExceeded {
+            kind: LimitKind::Node,
+            ..
+        })
+    ));
+    assert_eq!(set_masks(&family), expected);
+
+    let deep = FamilySpace::new(4096).unwrap();
+    let powerset = deep.powerset().unwrap();
+    let (_, compacted) = deep.compact(&[powerset]).unwrap();
+    assert_eq!(compacted[0].count(), BigUint::from(1u8) << 4096usize);
+}

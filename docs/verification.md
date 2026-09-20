@@ -18,7 +18,7 @@ ZDD構造、Family意味論、Frontier Stateの十分性、組み込み問題の
 | ZF-BASE-002 | public APIのsafe利用、FFI依存の有無、自前unsafe禁止方針のCI確認 |
 | ZF-BASE-003, ZF-BASE-004 | 操作前後で入力Familyの集合・rootが不変、共通部分のノード共有、反復filterのallocation測定 |
 | ZF-BASE-005 | 元変数やspace handleをdropしてもFamily・iterator・indexが有効 |
-| ZF-BASE-006 | 別spaceの拒否、明示mapの検証、order固定、compaction後の意味保存 |
+| ZF-BASE-006 | 別spaceの拒否、明示mapの全域性・範囲・単射性・順序検証、order固定、複数root compaction後の値・count・列挙順・共有・Graph辺対応の保存 |
 | ZF-FAM-001 | 全探索集合族で4演算を独立oracleと比較 |
 | ZF-FAM-002, ZF-FAM-003, ZF-FAM-004 | membership、Family間subset/equality、ZERO/unit境界、context不一致 |
 | ZF-FLT-001, ZF-FLT-002 | inclusionが要素を保持、exclusionとの分割、存在しない要素 |

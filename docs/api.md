@@ -205,17 +205,19 @@ high-levelのpaths等も同じ構築器を使う。low-level APIを使った場�
 
 ## 8. Importとcompaction
 
-v1は明示importを提供する。API形状は`destination.import(&source_family, &variable_map)`を候補とする。
+v1は`destination.import(&source_family, &variable_map)`で明示importを提供する。`variable_map[i]`はsource variable `i`に対応するdestinationの`VariableId`である。
 
 - mapはsource universeの全要素からdestinationへの明示的な対応。
 - v1は同数のuniverse間の全単射で、変数順序を保存する対応に限定。
 - 意味の対応付けは呼び出し側が指定し、libraryは範囲・全域性・単射性・順序を検証。
 - 同じ変数数だけから意味の一致を推論しない。
-- 順序が異なる場合はOrderMismatch。reorderingはv1非スコープ。
+- sourceとdestinationの変数数が異なる場合は`UniverseSizeMismatch`、map長がsource universe全体を覆わない場合は`InvalidVariableMapLength`、範囲外・重複・順序不一致はそれぞれ`InvalidMappedVariable`、`DuplicateMappedVariable`、`OrderMismatch`。reorderingはv1非スコープ。
 
-compactionは同じspaceの複数rootをまとめて新spaceへ移し、root間の共有を維持する。戻り値は新spaceと入力順に対応するFamily群。元のFamilyは変化しない。
+`source_space.compact(&families)`は同じspaceの複数rootをまとめて新spaceへ移し、root間の共有を維持する。戻り値は`(FamilySpace, Vec<SetFamily>)`で、Family群は入力順に対応する。空の入力も許す。別spaceのFamilyを含む場合は`ContextMismatch`。元のFamilyは変化しない。
 
-GraphSpaceでのcompactionはGraphと辺対応も保持した結果を返す。操作のために旧Graphの辺IDを再採番しない。単純なfree/GC操作ではなく、新しい所有領域への移動であることを名前・説明に明示する。
+`GraphSpace::compact`はGraph、固定variable order、元EdgeIdとの対応を保持した`(GraphSpace, Vec<EdgeFamily>)`を返す。操作のために旧Graphの辺IDを再採番しない。単純なfree/GC操作ではなく、新しい所有領域への移動である。
+
+import/compactionは複数rootで共有する到達DAGを一つのlocal snapshotへ非再帰で写し、source guardを解放してからdestinationへ非再帰で再構築する。追加一時領域は到達node数に対してO(N)。compaction中のピークでは旧DAG、local snapshot、新DAGが同時に存在する。旧spaceまたは旧Familyを保持する利用者がいる間は旧managerのメモリも保持され、すべての旧所有者をdropした後にのみ解放可能になる。
 
 ## 9. 資源制限、統計、キャンセル
 
@@ -255,7 +257,7 @@ space作成時、固定node capacityへ変換できない値と、universe初期
 | 分類 | 例 |
 |---|---|
 | 入力 | InvalidVertex、InvalidElement、SelfLoop、DuplicateEdge、InvalidRange |
-| space/順序 | ContextMismatch、InvalidVariableMap、OrderMismatch、InvalidEdgeOrder |
+| space/順序 | ContextMismatch、UniverseSizeMismatch、InvalidVariableMapLength、InvalidMappedVariable、DuplicateMappedVariable、OrderMismatch、InvalidEdgeOrder |
 | 資源 | `LimitExceeded { kind: Node/State/Transition/Memo/QueryNodes/CountBits, limit, attempted, stats }` |
 | 制御 | Cancelled |
 | 数値 | CountOverflow。将来WeightOverflow、InvalidWeight |
