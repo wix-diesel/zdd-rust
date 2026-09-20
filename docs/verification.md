@@ -114,6 +114,15 @@ proptest等で次を生成する。
 
 さらにmergeあり/なし、pruningあり/なしの結果集合を比較する。label名を置換してcanonicalize後に一致すること、canonicalizeの冪等性、すべてのhashを一定にした場合のEq判定を検査する。
 
+### Frontier検証のCI実行区分
+
+| 区分 | 探索範囲 | 2026-09-20実測 |
+|---|---|---|
+| 通常CI | 4頂点以下の全単純Graphを独立oracleと比較。K4で入力/BFS/逆/固定seed順のsuffix集合とmerge/pruningの4構成を比較。4辺Graphでは全24順列を比較 | 追加した直接検証6件で0.12秒（debug、incremental build済み） |
+| 定期CI | 通常CIに加え、5頂点の全1,024単純Graphについてmatching/cycleと全端点対pathを独立oracleと比較 | 対象テストで5.46秒（debug、incremental build済み） |
+
+実測はLinux x86_64の開発環境での値であり、合否の性能閾値には使わない。定期側の全探索は`ZDD_EXTENDED_FRONTIER_CASES=1`で有効化する。6頂点の全32,768単純Graphは、辺部分集合と全端点対の積が通常・定期CIの回帰検証として過大になるため対象外とする。
+
 ### 境界ケース
 
 - 同じstepで導入・forgetされる端点。

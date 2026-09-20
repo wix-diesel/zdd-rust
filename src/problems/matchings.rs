@@ -4,7 +4,7 @@ use crate::{Branch, Choice, EdgeStep, FrontierProblem, FrontierView, Graph};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct MatchingState {
-    matched_slots: Vec<bool>,
+    pub(super) matched_slots: Vec<bool>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

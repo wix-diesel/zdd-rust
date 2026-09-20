@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 60
     env:
       ZDD_PROPTEST_CASES: "4096"
+      ZDD_EXTENDED_FRONTIER_CASES: "1"
 
     steps:
       - name: Check out repository

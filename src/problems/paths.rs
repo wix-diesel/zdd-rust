@@ -7,17 +7,17 @@ const TARGET: u8 = 2;
 const BOTH_ENDPOINTS: u8 = SOURCE | TARGET;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-struct PathSlot {
-    degree: u8,
-    component: Option<u32>,
-    endpoint_mask: u8,
+pub(super) struct PathSlot {
+    pub(super) degree: u8,
+    pub(super) component: Option<u32>,
+    pub(super) endpoint_mask: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct PathState {
-    slots: Vec<PathSlot>,
-    done: bool,
-    possible: bool,
+    pub(super) slots: Vec<PathSlot>,
+    pub(super) done: bool,
+    pub(super) possible: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
