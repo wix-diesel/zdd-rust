@@ -4,15 +4,15 @@ use std::convert::Infallible;
 use crate::{Branch, Choice, EdgeStep, FrontierProblem, FrontierView, Graph};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-struct CycleSlot {
-    degree: u8,
-    component: Option<u32>,
+pub(super) struct CycleSlot {
+    pub(super) degree: u8,
+    pub(super) component: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CycleState {
-    slots: Vec<CycleSlot>,
-    done: bool,
+    pub(super) slots: Vec<CycleSlot>,
+    pub(super) done: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
