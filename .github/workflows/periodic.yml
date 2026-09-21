@@ -31,3 +31,37 @@ jobs:
 
       - name: Test graph-independent build
         run: cargo test --locked --no-default-features
+
+  fuzz:
+    name: Fixed-seed API fuzzing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: nightly
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@cargo-fuzz
+
+      - name: Fuzz family operation sequences
+        run: cargo fuzz run family_operations -- -max_total_time=300 -seed=22001
+
+      - name: Fuzz graph inputs and orderings
+        run: cargo fuzz run graph_inputs -- -max_total_time=300 -seed=22002
+
+      - name: Fuzz imports, limits, and recovery
+        run: cargo fuzz run import_limits -- -max_total_time=300 -seed=22003
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore
