@@ -27,33 +27,49 @@ fn family_construction(c: &mut Criterion) {
     let mut group = c.benchmark_group("node-table");
     for set_count in [256, 4_096] {
         let raw = explicit_sets(18, set_count, 23);
-        group.bench_with_input(BenchmarkId::new("from-sets-miss", set_count), &raw, |b, sets| {
-            b.iter(|| {
+        group.bench_with_input(
+            BenchmarkId::new("from-sets-miss", set_count),
+            &raw,
+            |b, sets| {
+                b.iter(|| {
+                    let space = FamilySpace::new(18).unwrap();
+                    let variables = sets
+                        .iter()
+                        .map(|set| {
+                            set.iter()
+                                .map(|&i| space.variable(i).unwrap())
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>();
+                    black_box(space.from_sets(variables).unwrap())
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("from-sets-hit", set_count),
+            &raw,
+            |b, sets| {
                 let space = FamilySpace::new(18).unwrap();
                 let variables = sets
                     .iter()
-                    .map(|set| set.iter().map(|&i| space.variable(i).unwrap()).collect::<Vec<_>>())
+                    .map(|set| {
+                        set.iter()
+                            .map(|&i| space.variable(i).unwrap())
+                            .collect::<Vec<_>>()
+                    })
                     .collect::<Vec<_>>();
-                black_box(space.from_sets(variables).unwrap())
-            });
-        });
-        group.bench_with_input(BenchmarkId::new("from-sets-hit", set_count), &raw, |b, sets| {
-            let space = FamilySpace::new(18).unwrap();
-            let variables = sets
-                .iter()
-                .map(|set| set.iter().map(|&i| space.variable(i).unwrap()).collect::<Vec<_>>())
-                .collect::<Vec<_>>();
-            let _first = space
-                .from_sets(variables.iter().map(|set| set.iter().copied()))
-                .unwrap();
-            b.iter(|| {
-                black_box(
-                    space
-                        .from_sets(variables.iter().map(|set| set.iter().copied()))
-                        .unwrap(),
-                )
-            });
-        });
+                let _first = space
+                    .from_sets(variables.iter().map(|set| set.iter().copied()))
+                    .unwrap();
+                b.iter(|| {
+                    black_box(
+                        space
+                            .from_sets(variables.iter().map(|set| set.iter().copied()))
+                            .unwrap(),
+                    )
+                });
+            },
+        );
     }
     group.finish();
 }
@@ -70,9 +86,14 @@ fn family_operations(c: &mut Criterion) {
         ("union", zdd_family::SetFamily::union as fn(&_, &_) -> _),
         ("intersection", zdd_family::SetFamily::intersection),
         ("difference", zdd_family::SetFamily::difference),
-        ("symmetric-difference", zdd_family::SetFamily::symmetric_difference),
+        (
+            "symmetric-difference",
+            zdd_family::SetFamily::symmetric_difference,
+        ),
     ] {
-        group.bench_function(name, |b| b.iter(|| black_box(operation(&left, &right).unwrap())));
+        group.bench_function(name, |b| {
+            b.iter(|| black_box(operation(&left, &right).unwrap()))
+        });
     }
     group.bench_function("filter-contains", |b| {
         b.iter(|| black_box(left.filter_contains(element).unwrap()))
@@ -85,7 +106,12 @@ fn family_operations(c: &mut Criterion) {
 
 fn queries(c: &mut Criterion) {
     let space = FamilySpace::new(24).unwrap();
-    let family = space.powerset().unwrap().cardinality().between(8..=12).unwrap();
+    let family = space
+        .powerset()
+        .unwrap()
+        .cardinality()
+        .between(8..=12)
+        .unwrap();
     let index = family.count_index(&QueryLimits::default()).unwrap();
     let mut group = c.benchmark_group("query");
     group.bench_function("count", |b| b.iter(|| black_box(family.count())));
@@ -132,7 +158,12 @@ fn frontier(c: &mut Criterion) {
             let id = BenchmarkId::new(dataset.name, order_name);
             group.bench_with_input(id, &order, |b, order| {
                 b.iter_batched(
-                    || GraphSpace::builder(&dataset.graph).ordering(order.clone()).build().unwrap(),
+                    || {
+                        GraphSpace::builder(&dataset.graph)
+                            .ordering(order.clone())
+                            .build()
+                            .unwrap()
+                    },
                     |space| black_box(space.matchings_with_stats().unwrap()),
                     BatchSize::SmallInput,
                 );
@@ -151,10 +182,13 @@ struct StateFixture {
 fn canonicalize(state: &mut StateFixture) {
     let mut old = Vec::new();
     for label in &mut state.labels {
-        let normalized = old.iter().position(|seen| seen == label).unwrap_or_else(|| {
-            old.push(*label);
-            old.len() - 1
-        });
+        let normalized = old
+            .iter()
+            .position(|seen| seen == label)
+            .unwrap_or_else(|| {
+                old.push(*label);
+                old.len() - 1
+            });
         *label = normalized as u32;
     }
 }
@@ -217,5 +251,12 @@ impl RngCore for BenchRng {
     }
 }
 
-criterion_group!(benches, family_construction, family_operations, queries, frontier, state_operations);
+criterion_group!(
+    benches,
+    family_construction,
+    family_operations,
+    queries,
+    frontier,
+    state_operations
+);
 criterion_main!(benches);

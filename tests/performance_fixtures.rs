@@ -39,7 +39,10 @@ fn performance_graph_corpus_is_deterministic_and_orders_every_edge() {
 fn assert_order_is_permutation(order: &[zdd_family::EdgeId], edge_count: usize) {
     assert_eq!(order.len(), edge_count);
     assert_eq!(
-        order.iter().map(|edge| edge.index()).collect::<BTreeSet<_>>(),
+        order
+            .iter()
+            .map(|edge| edge.index())
+            .collect::<BTreeSet<_>>(),
         (0..edge_count).collect()
     );
 }

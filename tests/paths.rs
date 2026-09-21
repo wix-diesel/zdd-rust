@@ -104,10 +104,12 @@ fn path_report_preserves_value_and_exposes_completed_layers() {
     let target = graph.vertex_id(3).unwrap();
     let report = space.paths_with_stats(source, target).unwrap();
 
-    assert!(report
-        .value
-        .equivalent(&space.paths(source, target).unwrap())
-        .unwrap());
+    assert!(
+        report
+            .value
+            .equivalent(&space.paths(source, target).unwrap())
+            .unwrap()
+    );
     assert_eq!(report.stats.layers_processed, graph.edge_count());
     assert!(report.stats.transitions_attempted > 0);
 }

@@ -37,18 +37,25 @@ pub fn graph_datasets() -> Result<Vec<GraphDataset>, GraphError> {
         ("sparse-seed-23", sparse_edges(28, 42, 23)),
     ]
     .into_iter()
-    .map(|(name, (vertices, edges))| Graph::from_edges(vertices, edges).and_then(|g| GraphDataset::new(name, g)))
+    .map(|(name, (vertices, edges))| {
+        Graph::from_edges(vertices, edges).and_then(|g| GraphDataset::new(name, g))
+    })
     .collect()
 }
 
 fn chain_edges(vertices: usize) -> (usize, Vec<(usize, usize)>) {
-    (vertices, (1..vertices).map(|vertex| (vertex - 1, vertex)).collect())
+    (
+        vertices,
+        (1..vertices).map(|vertex| (vertex - 1, vertex)).collect(),
+    )
 }
 
 fn binary_tree_edges(vertices: usize) -> (usize, Vec<(usize, usize)>) {
     (
         vertices,
-        (1..vertices).map(|child| ((child - 1) / 2, child)).collect(),
+        (1..vertices)
+            .map(|child| ((child - 1) / 2, child))
+            .collect(),
     )
 }
 
@@ -97,7 +104,11 @@ fn sparse_edges(vertices: usize, edge_count: usize, seed: u64) -> (usize, Vec<(u
         let first = state as usize % vertices;
         state = xorshift(state);
         let second = state as usize % vertices;
-        let edge = if first < second { (first, second) } else { (second, first) };
+        let edge = if first < second {
+            (first, second)
+        } else {
+            (second, first)
+        };
         if edge.0 != edge.1 && !edges.contains(&edge) {
             edges.push(edge);
         }
