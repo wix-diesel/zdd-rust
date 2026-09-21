@@ -40,7 +40,10 @@ fn failed_operations_keep_existing_families_and_the_manager_reusable() {
     let expected_left = masks(&left);
     let expected_right = masks(&right);
 
-    let error = left.union(&right).unwrap_err();
+    let error = match left.union(&right) {
+        Ok(_) => panic!("operation memo limit must be exceeded"),
+        Err(error) => error,
+    };
     let Error::LimitExceeded { kind, stats, .. } = error else {
         panic!("operation memo limit must be reported");
     };
