@@ -30,9 +30,9 @@ ZDD構造、Family意味論、Frontier Stateの十分性、組み込み問題の
 | ZF-GRAPH-001, ZF-GRAPH-002, ZF-GRAPH-003, ZF-GRAPH-004, ZF-GRAPH-005 | 小Graphの全部分辺集合を独立述語で比較、孤立頂点、同一spaceの結果合成 |
 | ZF-FRONT-001, ZF-FRONT-002, ZF-FRONT-003 | 外部型によるtrait実装、mergeあり/なし、suffix集合の直接比較、衝突hasher |
 | ZF-ORDER-001 | 全辺の順列検証、orderingを変えて元EdgeIdへ戻した集合一致、BFS fixture |
-| ZF-RES-001, ZF-RES-002 | 各上限の直前・一致・超過、ピーク値、cache制限、途中統計 |
-| ZF-ERR-001, ZF-ERR-002 | エラー分類、キャンセル、失敗後の既存Family・manager整合性 |
-| ZF-CONC-001, ZF-CONC-002 | 同時query/write、独立space、iterator/visitor/RNG内からの再入でdeadlockしない |
+| ZF-RES-001, ZF-RES-002 | `tests/internal/family.rs`、`tests/frontier_builder.rs`、`tests/resources.rs`で各上限の直前・一致・超過、cache制限、途中統計を検証 |
+| ZF-ERR-001, ZF-ERR-002 | `tests/frontier_builder.rs`と`tests/resources.rs`でエラー分類、キャンセル、失敗後の既存Family・manager整合性を検証 |
+| ZF-CONC-001, ZF-CONC-002 | `tests/resources.rs`とsampling/iteratorの統合テストで同時query/write、独立space、iterator/visitor/RNG内からの再入を検証 |
 
 ### Issue #4公開契約のfixture
 
