@@ -69,6 +69,7 @@ ZDDが小さくても解数は非常に大きい場合があります。`family.
 | [設計判断](docs/decisions.md) | 採用案、代替案、理由、欠点、変更可能性 |
 | [Backend適合性評価](docs/backend-evaluation.md) | OxiDDと専用coreの適合性・性能比較、採用結果 |
 | [検証計画](docs/verification.md) | 正当性、property test、fuzzing、benchmark |
+| [性能baseline](docs/performance-baseline.md) | Criterion、実用workflow、比較・回帰判断 |
 | [ロードマップ](docs/roadmap.md) | 実装フェーズ、1.0条件、未決事項、OSS運用 |
 | [関連OSS](docs/related-work.md) | 調査の要点と一次資料 |
 

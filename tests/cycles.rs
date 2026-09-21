@@ -81,6 +81,17 @@ fn cycles_equal_an_independent_exhaustive_oracle_on_small_graphs() {
 }
 
 #[test]
+fn cycle_report_preserves_value_and_exposes_completed_layers() {
+    let graph = Graph::from_edges(4, [(0, 1), (1, 2), (2, 3), (3, 0)]).unwrap();
+    let space = GraphSpace::new(&graph).unwrap();
+    let report = space.cycles_with_stats().unwrap();
+
+    assert!(report.value.equivalent(&space.cycles().unwrap()).unwrap());
+    assert_eq!(report.stats.layers_processed, graph.edge_count());
+    assert!(report.stats.transitions_attempted > 0);
+}
+
+#[test]
 fn empty_multiple_branched_and_simultaneously_forgotten_cases_are_handled() {
     for graph in [
         Graph::from_edges(0, []).unwrap(),

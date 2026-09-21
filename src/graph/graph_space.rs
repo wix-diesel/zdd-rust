@@ -107,7 +107,17 @@ impl GraphSpace {
     /// only isolated vertices. This method returns all matchings, not only
     /// maximal or maximum-cardinality matchings.
     pub fn matchings(&self) -> Result<EdgeFamily, BuildError<Infallible>> {
-        FrontierBuilder::new(self).build(crate::problems::MatchingProblem)
+        Ok(self.matchings_with_stats()?.value)
+    }
+
+    /// Returns all matchings together with frontier and ZDD construction statistics.
+    ///
+    /// This has the same semantics as [`Self::matchings`], and is intended for
+    /// diagnostics and reproducible performance measurements.
+    pub fn matchings_with_stats(
+        &self,
+    ) -> Result<crate::BuildReport<EdgeFamily>, BuildError<Infallible>> {
+        FrontierBuilder::new(self).build_with_stats(crate::problems::MatchingProblem)
     }
 
     /// Returns the family of all single simple cycles in this graph.
@@ -117,7 +127,16 @@ impl GraphSpace {
     /// unions of multiple cycles, and cycles with additional components are
     /// excluded. A graph with no cycle produces the empty family.
     pub fn cycles(&self) -> Result<EdgeFamily, BuildError<Infallible>> {
-        FrontierBuilder::new(self).build(crate::problems::CycleProblem)
+        Ok(self.cycles_with_stats()?.value)
+    }
+
+    /// Returns all single simple cycles together with construction statistics.
+    ///
+    /// This has the same semantics as [`Self::cycles`].
+    pub fn cycles_with_stats(
+        &self,
+    ) -> Result<crate::BuildReport<EdgeFamily>, BuildError<Infallible>> {
+        FrontierBuilder::new(self).build_with_stats(crate::problems::CycleProblem)
     }
 
     /// Returns the family of all vertex-simple paths from `source` to `target`.
@@ -131,7 +150,19 @@ impl GraphSpace {
         source: VertexId,
         target: VertexId,
     ) -> Result<EdgeFamily, BuildError<GraphError>> {
-        FrontierBuilder::new(self).build(crate::problems::PathProblem::new(source, target))
+        Ok(self.paths_with_stats(source, target)?.value)
+    }
+
+    /// Returns all vertex-simple paths together with construction statistics.
+    ///
+    /// This has the same endpoint validation and family semantics as [`Self::paths`].
+    pub fn paths_with_stats(
+        &self,
+        source: VertexId,
+        target: VertexId,
+    ) -> Result<crate::BuildReport<EdgeFamily>, BuildError<GraphError>> {
+        FrontierBuilder::new(self)
+            .build_with_stats(crate::problems::PathProblem::new(source, target))
     }
 
     /// Builds an edge family from explicit edge sets.

@@ -126,3 +126,21 @@ jobs:
 
       - name: Build
         run: cargo build --manifest-path tools/backend-evaluation/Cargo.toml --locked
+
+  performance-baseline:
+    name: Build performance baseline harness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: stable
+
+      - name: Build workflow runner and micro benchmarks
+        run: |
+          cargo build --locked --manifest-path tools/performance-baseline/Cargo.toml
+          cargo check --locked --all-features --benches

@@ -1,0 +1,11 @@
+[package]
+name = "zdd-performance-baseline"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+zdd-family = { path = "../..", features = ["graph", "sampling"] }
+
+[workspace]
+

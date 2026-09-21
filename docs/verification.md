@@ -1,6 +1,6 @@
 # 検証・benchmark計画
 
-状態: 実装前の全体計画。backendの最小適合性・micro benchmarkのみ[実行済み](backend-evaluation.md)で、以下の製品テスト・end-to-end benchmarkは未実行。
+状態: 製品テストを実装済み。Issue #23でCriterion micro benchmarkと専用processのworkflow runnerを追加した。実測値は環境ごとに[性能baseline](performance-baseline.md)の手順で採取する。
 
 ## 1. 検証の原則
 
@@ -172,6 +172,8 @@ v1には保存形式がないため、現在のtargetにparserは含めない。
 同じ変更で追加する。
 
 ## 8. Benchmark
+
+実装と再現手順、出力schema、回帰判断は[性能baseline](performance-baseline.md)を正とする。以下は測定範囲を定める設計要件として維持する。
 
 criterionはmicro benchmarkに使用。大規模・他言語比較・RSSは専用プロセスで測定する。
 
