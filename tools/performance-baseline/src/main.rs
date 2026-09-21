@@ -18,7 +18,10 @@ static ALLOCATOR: allocations::CountingAllocator = allocations::CountingAllocato
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arguments = env::args().skip(1).collect::<Vec<_>>();
-    if arguments.first().is_some_and(|argument| argument == "--child") {
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "--child")
+    {
         return child(&arguments[1..]);
     }
     orchestrate(&arguments)
@@ -101,13 +104,7 @@ fn run_child(
     timeout: Duration,
 ) -> Result<String, Box<dyn Error>> {
     let mut child = Command::new(executable)
-        .args([
-            "--child",
-            case,
-            order,
-            retention,
-            &iterations.to_string(),
-        ])
+        .args(["--child", case, order, retention, &iterations.to_string()])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -170,7 +167,11 @@ fn environment_json() -> String {
         "{{\"record_type\":\"environment\",\"commit\":\"{}\",\"rustc\":\"{}\",\"profile\":\"{}\",\"release_opt_level\":3,\"release_lto\":false,\"release_codegen_units\":16,\"panic_strategy\":\"unwind\",\"target_os\":\"{}\",\"target_arch\":\"{}\",\"cpu\":\"{}\",\"memory_bytes\":{},\"threads\":{},\"gc\":\"backend-managed\",\"shared_cache_entries\":262144,\"ordering_conversion_included\":false}}",
         json_escape(&commit),
         json_escape(&rustc),
-        if cfg!(debug_assertions) { "debug" } else { "release" },
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
         env::consts::OS,
         env::consts::ARCH,
         json_escape(&cpu),
@@ -185,7 +186,11 @@ fn command_text(program: &str, arguments: &[&str]) -> String {
         .output()
         .ok()
         .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().replace('\n', " | "))
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .replace('\n', " | ")
+        })
         .unwrap_or_else(|| "unavailable".to_owned())
 }
 
@@ -193,12 +198,20 @@ fn cpu_description() -> String {
     #[cfg(target_os = "windows")]
     return command_text(
         "powershell",
-        &["-NoProfile", "-Command", "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)"],
+        &[
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)",
+        ],
     );
     #[cfg(target_os = "linux")]
     return std::fs::read_to_string("/proc/cpuinfo")
         .ok()
-        .and_then(|contents| contents.lines().find_map(|line| line.strip_prefix("model name\t: ").map(str::to_owned)))
+        .and_then(|contents| {
+            contents
+                .lines()
+                .find_map(|line| line.strip_prefix("model name\t: ").map(str::to_owned))
+        })
         .unwrap_or_else(|| "unavailable".to_owned());
     #[cfg(target_os = "macos")]
     return command_text("sysctl", &["-n", "machdep.cpu.brand_string"]);
@@ -210,14 +223,24 @@ fn memory_bytes() -> Option<u64> {
     #[cfg(target_os = "windows")]
     return command_text(
         "powershell",
-        &["-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"],
+        &[
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+        ],
     )
     .parse()
     .ok();
     #[cfg(target_os = "linux")]
     return std::fs::read_to_string("/proc/meminfo")
         .ok()
-        .and_then(|contents| contents.lines().find_map(|line| line.strip_prefix("MemTotal:").and_then(|value| value.split_whitespace().next()).and_then(|value| value.parse::<u64>().ok())))
+        .and_then(|contents| {
+            contents.lines().find_map(|line| {
+                line.strip_prefix("MemTotal:")
+                    .and_then(|value| value.split_whitespace().next())
+                    .and_then(|value| value.parse::<u64>().ok())
+            })
+        })
         .map(|kilobytes| kilobytes * 1_024);
     #[cfg(target_os = "macos")]
     return command_text("sysctl", &["-n", "hw.memsize"]).parse().ok();

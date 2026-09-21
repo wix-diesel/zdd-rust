@@ -59,7 +59,9 @@ impl WorkloadResult {
     ) -> Result<Self, Box<dyn Error>> {
         allocations::reset();
         let started = Instant::now();
-        let space = GraphSpace::builder(&dataset.graph).ordering(order).build()?;
+        let space = GraphSpace::builder(&dataset.graph)
+            .ordering(order)
+            .build()?;
         let report = space.matchings_with_stats()?;
         let base = report.value;
         let mut retained = Vec::with_capacity(match retention {
@@ -72,7 +74,9 @@ impl WorkloadResult {
         let mut index_bytes = 0usize;
 
         for iteration in 0..iterations {
-            let edge = dataset.graph.edge_id(iteration % dataset.graph.edge_count())?;
+            let edge = dataset
+                .graph
+                .edge_id(iteration % dataset.graph.edge_count())?;
             let filtered = if iteration % 2 == 0 {
                 base.filter_contains(edge)?
             } else {

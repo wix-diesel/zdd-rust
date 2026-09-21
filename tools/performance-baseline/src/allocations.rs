@@ -36,9 +36,5 @@ pub fn reset() {
 }
 
 pub fn snapshot() -> (usize, usize) {
-    (
-        CALLS.load(Ordering::Relaxed),
-        BYTES.load(Ordering::Relaxed),
-    )
+    (CALLS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed))
 }
-
