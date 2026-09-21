@@ -6,7 +6,7 @@ use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_ma
 use rand_core::RngCore;
 use zdd_family::{FamilySpace, GraphSpace, QueryLimits};
 
-#[path = "../tools/performance-baseline/src/datasets.rs"]
+#[path = "../../performance-baseline/src/datasets.rs"]
 mod datasets;
 
 fn explicit_sets(variable_count: usize, set_count: usize, seed: u64) -> Vec<Vec<usize>> {

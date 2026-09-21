@@ -142,5 +142,7 @@ jobs:
 
       - name: Build workflow runner and micro benchmarks
         run: |
+          cargo fmt --manifest-path tools/performance-baseline/Cargo.toml -- --check
+          cargo fmt --manifest-path tools/performance-benchmarks/Cargo.toml -- --check
           cargo build --locked --manifest-path tools/performance-baseline/Cargo.toml
-          cargo check --locked --all-features --benches
+          cargo check --locked --manifest-path tools/performance-benchmarks/Cargo.toml --benches

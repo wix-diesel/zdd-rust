@@ -7,7 +7,7 @@ Issue #23の性能計測を再現するため、micro benchmarkと実用workflow
 Criterion suiteは次で実行する。
 
 ```bash
-cargo bench --all-features --bench micro
+cargo bench --locked --manifest-path tools/performance-benchmarks/Cargo.toml --bench micro
 ```
 
 | group | 対象 |
