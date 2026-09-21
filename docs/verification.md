@@ -158,7 +158,7 @@ cargo-fuzz等でAPI操作列、graph入力、ID map、ordering、limits、エラ
 
 | 区分 | 実行内容 |
 |---|---|
-| 通常CI | `fuzz/corpus/`の代表入力を`tests/fuzz_corpus.rs`で再生し、6変数以下の解集合を独立した明示集合oracleと比較。`tools/differential/fixtures.tsv`を公開APIでも検証 |
+| 通常CI | `fuzz/corpus/`の代表入力を`tests/fuzz_corpus.rs`で再生し、Family/importは6変数以下、Graphは5頂点・10辺以下の解集合を独立した明示集合oracleと比較。`tools/differential/fixtures.tsv`を公開APIでも検証 |
 | 定期CI | cargo-fuzzでFamily操作列、Graph/ordering、import/limits/失敗後再利用の3 targetを固定seed・各300秒で実行 |
 | 任意の外部検証 | TdZdd、Graphillion、OxiDD adapterが共通fixtureを実行し、`tools/differential/compare.py`でcountではなく正規化した解集合を比較 |
 

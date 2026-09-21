@@ -2,7 +2,8 @@
 
 このdirectoryは製品crateと別workspaceであり、通常依存・build依存へ
 `libfuzzer-sys`や外部C/C++実装を追加しない。各targetは公開APIだけを使い、
-6変数以下の解集合をZDD実装と共有しない`BTreeSet<u64>` oracleと比較する。
+Family/importでは6変数以下、Graphでは5頂点・10辺以下の解集合を、ZDD実装と
+共有しない`BTreeSet<u64>` oracleと比較する。
 
 ## Target
 
