@@ -154,6 +154,23 @@ cargo-fuzz等でAPI操作列、graph入力、ID map、ordering、limits、エラ
 
 自前unsafeを導入する場合のみ局所不変条件とMiri等の追加検証を必須にする。依存backendの安全性確認は別に行う。
 
+### v1 fuzz・differential実行区分
+
+| 区分 | 実行内容 |
+|---|---|
+| 通常CI | `fuzz/corpus/`の代表入力を`tests/fuzz_corpus.rs`で再生し、6変数以下の解集合を独立した明示集合oracleと比較。`tools/differential/fixtures.tsv`を公開APIでも検証 |
+| 定期CI | cargo-fuzzでFamily操作列、Graph/ordering、import/limits/失敗後再利用の3 targetを固定seed・各300秒で実行 |
+| 任意の外部検証 | TdZdd、Graphillion、OxiDD adapterが共通fixtureを実行し、`tools/differential/compare.py`でcountではなく正規化した解集合を比較 |
+
+corpusの再現、最小化、crashを通常の回帰テストへ移す手順は
+`fuzz/README.md`を正とする。外部fixtureは元EdgeId、universe、variable順、
+matching/cycle/pathの問題意味を`tools/differential/README.md`に固定する。外部実装は
+唯一のoracleとせず、通常CIでは外部runtimeなしで同じ期待解を検証する。
+
+v1には保存形式がないため、現在のtargetにparserは含めない。自前`unsafe`を将来導入する
+変更では、局所invariantの記録、その経路を通るfuzz target、決定的なMiri回帰テストを
+同じ変更で追加する。
+
 ## 8. Benchmark
 
 criterionはmicro benchmarkに使用。大規模・他言語比較・RSSは専用プロセスで測定する。

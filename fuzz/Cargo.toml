@@ -1,0 +1,36 @@
+[package]
+name = "zdd-family-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+zdd-family = { path = "..", features = ["graph"] }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "family_operations"
+path = "fuzz_targets/family_operations.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "graph_inputs"
+path = "fuzz_targets/graph_inputs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "import_limits"
+path = "fuzz_targets/import_limits.rs"
+test = false
+doc = false
+bench = false
