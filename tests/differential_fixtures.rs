@@ -58,8 +58,7 @@ fn public_api_matches_committed_cross_implementation_fixtures() {
         }
         let fields = line.split('\t').collect::<Vec<_>>();
         assert_eq!(fields.len(), 9, "malformed fixture: {line}");
-        let [name, kind, size, edges, order, args, left, right, expected] =
-            fields.as_slice()
+        let [name, kind, size, edges, order, args, left, right, expected] = fields.as_slice()
         else {
             unreachable!()
         };
@@ -83,7 +82,10 @@ fn public_api_matches_committed_cross_implementation_fixtures() {
 
         let edge_pairs = edges.split(',').map(|edge| {
             let (first, second) = edge.split_once('-').unwrap();
-            (first.parse::<usize>().unwrap(), second.parse::<usize>().unwrap())
+            (
+                first.parse::<usize>().unwrap(),
+                second.parse::<usize>().unwrap(),
+            )
         });
         let graph = Graph::from_edges(size, edge_pairs).unwrap();
         let edge_order = EdgeOrder::new(

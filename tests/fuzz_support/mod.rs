@@ -27,7 +27,9 @@ impl<'a> Bytes<'a> {
 }
 
 fn variables(space: &FamilySpace, count: usize) -> Vec<zdd_family::VariableId> {
-    (0..count).map(|index| space.variable(index).unwrap()).collect()
+    (0..count)
+        .map(|index| space.variable(index).unwrap())
+        .collect()
 }
 
 fn family_masks(family: &SetFamily) -> Masks {
@@ -98,7 +100,12 @@ pub fn run_family_operations(data: &[u8]) {
     let vars = variables(&space, variable_count);
     let all: Masks = (0..(1u64 << variable_count)).collect();
     let (explicit, explicit_masks) = explicit_family(&space, &vars, &mut bytes);
-    let mut families = vec![space.empty(), space.unit(), space.powerset().unwrap(), explicit];
+    let mut families = vec![
+        space.empty(),
+        space.unit(),
+        space.powerset().unwrap(),
+        explicit,
+    ];
     let mut oracles = vec![Masks::new(), Masks::from([0]), all, explicit_masks];
 
     let steps = usize::from(bytes.next() % 65);
@@ -113,7 +120,10 @@ pub fn run_family_operations(data: &[u8]) {
             ),
             1 => (
                 families[left].intersection(&families[right]).unwrap(),
-                oracles[left].intersection(&oracles[right]).copied().collect(),
+                oracles[left]
+                    .intersection(&oracles[right])
+                    .copied()
+                    .collect(),
             ),
             2 => (
                 families[left].difference(&families[right]).unwrap(),
@@ -356,8 +366,14 @@ pub fn run_graph_inputs(data: &[u8]) {
     .unwrap();
     let spaces = [
         GraphSpace::new(&graph).unwrap(),
-        GraphSpace::builder(&graph).ordering(BfsOrder).build().unwrap(),
-        GraphSpace::builder(&graph).ordering(reverse).build().unwrap(),
+        GraphSpace::builder(&graph)
+            .ordering(BfsOrder)
+            .build()
+            .unwrap(),
+        GraphSpace::builder(&graph)
+            .ordering(reverse)
+            .build()
+            .unwrap(),
     ];
     let matching = matching_oracle(&graph);
     let cycles = cycle_oracle(&graph);
@@ -400,7 +416,11 @@ pub fn run_import_limits(data: &[u8]) {
     let mode = bytes.next() % 5;
     let map = match mode {
         0 => destination_vars.clone(),
-        1 => destination_vars.iter().copied().take(variable_count.saturating_sub(1)).collect(),
+        1 => destination_vars
+            .iter()
+            .copied()
+            .take(variable_count.saturating_sub(1))
+            .collect(),
         2 if variable_count > 1 => vec![destination_vars[0]; variable_count],
         3 => destination_vars.iter().rev().copied().collect(),
         4 if variable_count > 0 => {
