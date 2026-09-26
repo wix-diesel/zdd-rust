@@ -55,9 +55,7 @@ fn macos_metrics() -> ProcessMetrics {
     // SAFETY: the successful `getrusage` call above initialized `usage`.
     let usage = unsafe { usage.assume_init() };
     ProcessMetrics {
-        cpu_seconds: Some(
-            timeval_seconds(usage.ru_utime) + timeval_seconds(usage.ru_stime),
-        ),
+        cpu_seconds: Some(timeval_seconds(usage.ru_utime) + timeval_seconds(usage.ru_stime)),
         // Unlike Linux, macOS reports `ru_maxrss` in bytes.
         peak_rss_bytes: u64::try_from(usage.ru_maxrss).ok(),
     }
