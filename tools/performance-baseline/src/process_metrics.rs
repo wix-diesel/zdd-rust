@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::process::Command;
 
 #[derive(Default)]
@@ -21,13 +22,13 @@ pub fn current() -> ProcessMetrics {
     }
     #[cfg(target_os = "macos")]
     {
-        let pid = std::process::id().to_string();
-        return command_metrics("ps", &["-o", "time=,rss=", "-p", &pid]);
+        return macos_metrics();
     }
     #[allow(unreachable_code)]
     ProcessMetrics::default()
 }
 
+#[cfg(target_os = "windows")]
 fn command_metrics(program: &str, arguments: &[&str]) -> ProcessMetrics {
     let Ok(output) = Command::new(program).args(arguments).output() else {
         return ProcessMetrics::default();
@@ -41,6 +42,30 @@ fn command_metrics(program: &str, arguments: &[&str]) -> ProcessMetrics {
         };
     }
     ProcessMetrics::default()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_metrics() -> ProcessMetrics {
+    let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
+    // SAFETY: `usage` points to writable storage for one `rusage`. On success,
+    // `getrusage` initializes the complete value before it is read below.
+    if unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) } != 0 {
+        return ProcessMetrics::default();
+    }
+    // SAFETY: the successful `getrusage` call above initialized `usage`.
+    let usage = unsafe { usage.assume_init() };
+    ProcessMetrics {
+        cpu_seconds: Some(
+            timeval_seconds(usage.ru_utime) + timeval_seconds(usage.ru_stime),
+        ),
+        // Unlike Linux, macOS reports `ru_maxrss` in bytes.
+        peak_rss_bytes: u64::try_from(usage.ru_maxrss).ok(),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn timeval_seconds(value: libc::timeval) -> f64 {
+    value.tv_sec as f64 + value.tv_usec as f64 / 1_000_000.0
 }
 
 #[cfg(target_os = "linux")]
@@ -68,5 +93,17 @@ fn linux_metrics() -> ProcessMetrics {
     ProcessMetrics {
         cpu_seconds: ticks_per_second.map(|frequency| ticks as f64 / frequency as f64),
         peak_rss_bytes,
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn macos_reports_cpu_time_and_peak_rss() {
+        let metrics = current();
+        assert!(metrics.cpu_seconds.is_some());
+        assert!(metrics.peak_rss_bytes.is_some_and(|bytes| bytes > 0));
     }
 }
