@@ -94,6 +94,20 @@ fn zero_edge_graph_is_unit_and_isolated_vertices_do_not_remove_solutions() {
 }
 
 #[test]
+fn matching_report_preserves_value_and_exposes_completed_work() {
+    let graph = Graph::from_edges(5, [(0, 1), (1, 2), (2, 3), (3, 4)]).unwrap();
+    let space = GraphSpace::new(&graph).unwrap();
+    let report = space.matchings_with_stats().unwrap();
+    let ordinary = space.matchings().unwrap();
+
+    assert!(report.value.equivalent(&ordinary).unwrap());
+    assert_eq!(report.stats.layers_processed, graph.edge_count());
+    assert!(report.stats.transitions_attempted > 0);
+    assert!(report.stats.peak_frontier_states > 0);
+    assert!(report.stats.operation.nodes_after >= report.stats.operation.nodes_before);
+}
+
+#[test]
 fn original_edge_sets_are_identical_across_orderings() {
     let graph =
         Graph::from_edges(6, [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 5), (1, 4)]).unwrap();

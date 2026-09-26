@@ -2,6 +2,9 @@
 # will have compiled files and executables
 debug
 target
+baseline*.jsonl
+__pycache__/
+*.pyc
 fuzz/artifacts
 fuzz/coverage
 

@@ -16,8 +16,9 @@
 6. [Backend適合性評価](backend-evaluation.md): OxiDDと専用coreの比較・採用結果。
 7. [依存関係・互換性方針](dependencies.md): MSRV、backend固定、ライセンス・安全性の検査方針。
 8. [検証計画](verification.md): 正しいこと・性能をどう確認するか。
-9. [ロードマップ](roadmap.md): 着手順序と未決事項。
-10. [関連OSS](related-work.md): 比較の根拠。
+9. [性能baseline](performance-baseline.md): micro benchmark、workflow、比較・回帰判断。
+10. [ロードマップ](roadmap.md): 着手順序と未決事項。
+11. [関連OSS](related-work.md): 比較の根拠。
 
 ## 文書の位置付け
 
